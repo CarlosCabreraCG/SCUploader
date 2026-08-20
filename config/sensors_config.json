@@ -1,0 +1,36 @@
+{
+  "options": {
+    "minutes_back": 4320,
+    "minutes_back_end": 0,
+    "interval_scheduler": 60,
+    "moving_average": true,
+    "demeaning": true,
+    "ma_window": 5,
+    "ma_max_gap_minutes": 1.0
+  },
+
+  "sensors_channel": {
+    "16748_ch1": { "var": "a", "slope": -1.7612e-3, "offset": 12452.0176, "divisor": 5 },
+    "16748_ch2": { "var": "b", "slope": -1.7618e-3, "offset": 11686.5,    "divisor": 5 },
+    "16748_ch3": { "var": "c", "slope": -1.7645e-3, "offset": 11950.9033, "divisor": 5 },
+    "16752_ch1": { "var": "d", "slope": -1.7716e-3, "offset": 13049.377,  "divisor": 5 },
+    "16752_ch2": { "var": "x", "slope": -1.7736e-3, "offset": 12408.331,  "divisor": 5 },
+    "16752_ch3": { "var": "f", "slope": -1.7754e-3, "offset": 12528.874,  "divisor": 5 }
+  },
+
+  "composite_equations": {
+    "a,c": "(a + 0.3*c) / (1 - 0.09)",
+    "c,a": "(c + 0.3*a) / (1 - 0.09)",
+    "d": "d",
+    "x": "x",
+    "f": "f"
+  },
+
+  "output_nodes": {
+    "16748L_ch1": "a,c",
+    "16748C_ch1": "c,a",
+    "16752_ch1": "d",
+    "16752_ch2": "x",
+    "16752_ch3": "f"
+  }
+}
