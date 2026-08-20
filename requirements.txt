@@ -1,2 +1,7 @@
-python-dotenv>=1.0.0
-xdrlib3>=1.0.0
+python-dotenv>=1.2.3
+xdrlib3>=0.1.1
+
+# Interfaz gráfica (comando "python main.py gui") y exportación a Excel.
+# Opcionales si solo se usa la CLI.
+flet==0.28.3
+openpyxl>=3.1.0

@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 from typing import Optional
 
+from . import datastore
 from .client import SensorCloudClient, parse_channel_path
 from .config import SensorsConfig
 from .csv_export import save_to_csv
@@ -30,6 +31,8 @@ def transfer_complex_data_between_devices(
     upload_to_dest: bool = True,
     export_csv: bool = False,
     csv_output_dir: str = "datos_procesados",
+    save_to_store: bool = True,
+    data_dir: str = datastore.DEFAULT_DATA_DIR,
 ) -> None:
     """
     Ejecuta un ciclo completo de sincronización:
@@ -38,7 +41,9 @@ def transfer_complex_data_between_devices(
     2. Aplica la calibración lineal (slope, offset, divisor) por canal.
     3. Evalúa las ecuaciones compuestas para cada nodo de salida.
     4. Aplica media móvil centrada y/o demeaning por intervalo (opcional).
-    5. Sube los resultados al dispositivo destino y/o los exporta a CSV.
+    5. Sube los resultados al dispositivo destino, los exporta a CSV y/o
+       los guarda en el almacenamiento local (`data/`) para que la
+       interfaz Flet pueda graficarlos después.
     """
     opts = config.options
     minutes_back = opts.minutes_back if minutes_back is None else minutes_back
@@ -159,6 +164,9 @@ def transfer_complex_data_between_devices(
 
             safe_channel = dest_channel_path.replace("/", "_").replace("\\", "_")
             save_to_csv(upload_data, os.path.join(csv_dir, f"{safe_channel}.csv"))
+
+        if save_to_store:
+            datastore.append_points(dest_channel_path, upload_data, data_dir=data_dir)
 
         if upload_to_dest:
             dest_client.upload_data(sensor_dest, channel_dest, upload_data)

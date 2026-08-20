@@ -12,10 +12,9 @@ Este proyecto reemplaza a los tres scripts sueltos anteriores
 misma lógica de transformación. Ahora todo vive en un solo paquete
 (`sensorcloud/`) y se usa a través de `python main.py <comando>`.
 
-> **Nota:** por ahora este README cubre solo la interfaz de línea de
-> comandos (CLI). La interfaz gráfica con Flet (gráfico interactivo,
-> selección de rango de tiempo, checkboxes de sensores y descarga a
-> Excel) se implementará en una siguiente etapa, sobre esta misma base.
+Incluye además una pequeña interfaz gráfica (Flet) para **visualizar**
+esos datos ya guardados: selección de canales con checkboxes, rango de
+fecha/hora, gráfico interactivo y descarga a Excel.
 
 ## Estructura del proyecto
 
@@ -29,8 +28,11 @@ sensorcloud_sync/
 │   ├── pipeline.py              # Orquesta: descargar -> calibrar -> combinar -> subir/exportar
 │   ├── scheduler.py             # Ejecución periódica del pipeline
 │   └── csv_export.py            # Exportación de series a CSV
+│   ├── datastore.py              # Almacenamiento local (CSV por canal) que lee la GUI
+│   └── gui.py                    # Interfaz Flet (visor de gráficos + descarga a Excel)
 ├── config/
 │   └── sensors_config.json      # Canales, ecuaciones y opciones (datos NO sensibles)
+├── data/                         # Se crea automáticamente: histórico local por canal (no subir a git)
 ├── .env.example                 # Plantilla de variables de entorno sensibles
 ├── requirements.txt
 └── README.md
@@ -161,6 +163,47 @@ python main.py download --device source --sensor 16748 --channel ch1 --minutes-b
 python main.py show-config
 ```
 
+## Interfaz gráfica (Flet)
+
+`python main.py transfer` y `python main.py schedule` guardan automáticamente
+los resultados de cada nodo de salida en `data/<canal>.csv` (histórico
+local, además de subirlos a SensorCloud). La interfaz gráfica **solo lee
+esos archivos**: no vuelve a llamar a la API, así que ábrela después de
+haber corrido al menos un `transfer`.
+
+```bash
+python main.py gui
+```
+
+Esto abre una ventana de escritorio con:
+
+- **Canales**: un checkbox por cada canal con datos guardados en `data/`
+  (con un botón para recargar la lista si corriste otro `transfer` mientras
+  la interfaz estaba abierta).
+- **Rango de tiempo**: selectores de fecha y hora para el inicio y el fin
+  del período a graficar (por defecto, todo el rango disponible).
+- **Graficar**: dibuja un gráfico de líneas interactivo (con tooltip al
+  pasar el mouse) con los canales seleccionados en ese rango.
+- **Descargar Excel**: guarda los datos actualmente graficados en un
+  archivo `.xlsx` (una hoja "Combinado" con todos los canales alineados
+  por tiempo, más una hoja por canal), eligiendo la ubicación con el
+  diálogo nativo de guardado.
+
+Para abrirla en el navegador en vez de como ventana de escritorio:
+
+```bash
+python main.py gui --web
+```
+
+Para visualizar un directorio de datos distinto al por defecto (`data/`):
+
+```bash
+python main.py gui --data-dir otra_carpeta
+```
+
+> `flet`, `flet-web` (solo si usas `--web`) y `openpyxl` son necesarios
+> únicamente para este comando; el resto de la CLI funciona sin ellos.
+
 ## Uso como librería
 
 El pipeline también se puede usar directamente desde código Python:
@@ -193,5 +236,8 @@ transfer_complex_data_between_devices(source, dest, config)
 - API keys e IDs de dispositivo salieron del JSON y ahora viven en `.env`.
 - Se agregó una CLI real con subcomandos (`transfer`, `schedule`,
   `setup-nodes`, `delete-channel`, `delete-points`, `download`,
-  `show-config`) en lugar de un único `main()` con flags hardcodeados en
-  el código.
+  `show-config`, `gui`) en lugar de un único `main()` con flags
+  hardcodeados en el código.
+- Se agregó un almacenamiento local por canal (`data/`) que alimenta la
+  nueva interfaz gráfica en Flet, para visualizar y exportar a Excel sin
+  volver a consultar la API.
