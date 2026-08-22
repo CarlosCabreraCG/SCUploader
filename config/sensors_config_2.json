@@ -1,0 +1,23 @@
+{
+  "options": {
+    "minutes_back": 1470,
+    "minutes_back_end": 0,
+    "interval_scheduler": 60,
+    "moving_average": true,
+    "demeaning": true,
+    "ma_window": 5,
+    "ma_max_gap_minutes": 1.0
+  },
+
+  "sensors_channel": {
+    "38401_ch1": { "var": "a", "slope": -1.7730e-3, "offset": 14331.3398, "divisor": 5.1282 }
+  },
+
+  "composite_equations": {
+    "a": "a"
+  },
+
+  "output_nodes": {
+    "38401F_ch1": "a"
+  }
+}

@@ -3,5 +3,5 @@ xdrlib3>=0.1.1
 
 # Interfaz gráfica (comando "python main.py gui") y exportación a Excel.
 # Opcionales si solo se usa la CLI.
-flet==0.28.3
+flet==0.86.5
 openpyxl>=3.1.0

@@ -61,6 +61,7 @@ API_KEY_SOURCE=tu_api_key_origen
 API_KEY_DEST=tu_api_key_destino
 SOURCE_DEVICE=W020000000198806
 DEST_DEVICE=OAPI007627ZU9AWY
+CONFIG_FILE=config/sensors_config.json
 ```
 
 El archivo `.env` está en `.gitignore` y nunca debe compartirse. Puedes

@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import flet as ft
+import flet_charts as fch
 
 from . import datastore
 
@@ -42,6 +43,7 @@ def _fmt(dt: datetime) -> str:
 def _global_range(channels: List[str], data_dir: str) -> Optional[Tuple[datetime, datetime]]:
     """Calcula el rango [mínimo, máximo] de timestamps entre todos los canales dados."""
     min_ts, max_ts = None, None
+    
     for ch in channels:
         points = datastore.load_points(ch, data_dir=data_dir)
         if not points:
@@ -91,17 +93,23 @@ def build_app(page: ft.Page, data_dir: str = datastore.DEFAULT_DATA_DIR) -> None
 
     status_text = ft.Text("", color=ft.Colors.RED_700)
     state: Dict = {"start": None, "end": None, "last_loaded": {}}
+    zoom_state = {"zoom_level": 1.0, "pan_x": 0, "pan_y": 0}
 
     # ------------------------------------------------------------------
     # Chart
     # ------------------------------------------------------------------
-    chart = ft.LineChart(
+    chart = fch.LineChart(
         expand=True,
         interactive=True,
         tooltip_bgcolor=ft.Colors.with_opacity(0.9, ft.Colors.BLUE_GREY_900),
         border=ft.border.all(1, ft.Colors.OUTLINE),
         left_axis=ft.ChartAxis(labels_size=50),
         bottom_axis=ft.ChartAxis(labels_size=32),
+        # NUEVAS PROPIEDADES PARA ZOOM:
+        enable_interaction=True,  # Habilita interacción completa
+        zoom=1.0,
+        min_zoom=0.5,
+        max_zoom=5.0,
     )
 
     # ------------------------------------------------------------------
@@ -184,7 +192,7 @@ def build_app(page: ft.Page, data_dir: str = datastore.DEFAULT_DATA_DIR) -> None
             loaded[ch] = points
             color = PALETTE[channels.index(ch) % len(PALETTE)] if ch in channels else PALETTE[0]
             data_points = [
-                ft.LineChartDataPoint(
+                fch.LineChartDataPoint(
                     x=(ts - start_ns) / 1e9 / 60.0,
                     y=val,
                     tooltip=f"{ch}\n{datetime.fromtimestamp(ts / 1e9).strftime('%Y-%m-%d %H:%M:%S')}\n{val:.4f}",
@@ -192,7 +200,13 @@ def build_app(page: ft.Page, data_dir: str = datastore.DEFAULT_DATA_DIR) -> None
                 for ts, val in points
             ]
             data_series.append(
-                ft.LineChartData(data_points=data_points, color=color, stroke_width=2, curved=False, point=False)
+                fch.LineChartData(
+                    data_points=data_points, 
+                    color=color, 
+                    stroke_width=2, 
+                    curved=False, 
+                    point=False
+                )
             )
 
         if not data_series:
@@ -215,11 +229,46 @@ def build_app(page: ft.Page, data_dir: str = datastore.DEFAULT_DATA_DIR) -> None
         chart.max_x = total_minutes
         chart.bottom_axis = ft.ChartAxis(labels=bottom_labels, labels_size=32)
 
+        # Restaurar el estado del zoom después de actualizar los datos
+        chart.zoom = zoom_state["zoom_level"]
+        # Nota: pan_x y pan_y no son propiedades directas del LineChart en Flet
+        # Se manejan internamente por la interacción del usuario
+
         total_points = sum(len(p) for p in loaded.values())
         status_text.color = ft.Colors.GREEN_800
         status_text.value = f"Mostrando {len(data_series)} canal(es), {total_points} puntos en total."
         page.update()
 
+    # Agregar estas funciones después de build_chart:
+
+    def on_scroll_zoom(e: ft.ControlEvent) -> None:
+        """Maneja el zoom con la rueda del mouse"""
+        if hasattr(e, 'delta_y') and e.delta_y != 0:
+            # Ajustar nivel de zoom
+            zoom_delta = -e.delta_y * 0.01  # Ajusta la sensibilidad
+            new_zoom = max(0.5, min(5.0, chart.zoom + zoom_delta))
+            chart.zoom = new_zoom
+            zoom_state["zoom_level"] = new_zoom
+            page.update()
+
+    def on_pan_start(e: ft.ControlEvent) -> None:
+        """Inicia el panning del gráfico"""
+        # Guardar la posición inicial del mouse
+        if hasattr(e, 'local_x') and hasattr(e, 'local_y'):
+            zoom_state["pan_start_x"] = e.local_x
+            zoom_state["pan_start_y"] = e.local_y
+            zoom_state["is_panning"] = True
+
+    def on_pan_update(e: ft.ControlEvent) -> None:
+        """Actualiza el panning del gráfico"""
+        if zoom_state.get("is_panning", False):
+            # El panning se maneja automáticamente por Flet cuando el chart es interactive
+            # y tiene enable_interaction=True
+            pass
+
+    def on_pan_end(e: ft.ControlEvent) -> None:
+        """Termina el panning del gráfico"""
+        zoom_state["is_panning"] = False
     # ------------------------------------------------------------------
     # Descargar Excel
     # ------------------------------------------------------------------

@@ -100,7 +100,7 @@ def load_credentials(env_file: Optional[str] = None) -> Credentials:
 
 def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
     """Carga el archivo JSON con el mapeo de canales, ecuaciones y opciones."""
-    path = Path(config_file or DEFAULT_CONFIG_FILE)
+    path = Path(os.environ["CONFIG_FILE"]) or Path(config_file or DEFAULT_CONFIG_FILE)
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el archivo de configuración: {path}")
 

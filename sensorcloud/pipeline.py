@@ -52,7 +52,7 @@ def transfer_complex_data_between_devices(
     end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
     start_time_ns = end_time_ns - int(minutes_back * 60 * 1_000_000_000)
 
-    print(f"\n--- Transfiriendo datos de los últimos {minutes_back} minutos ---")
+    print(f"\n--- Transfiriendo datos de los últimos {minutes_back} minutos antes de {minutes_back_end} minutos ---")
     print(f"Ventana de tiempo (ns): {start_time_ns} - {end_time_ns}")
     if opts.moving_average:
         print(f"Media móvil activada (ventana={opts.ma_window}, gap_max={opts.ma_max_gap_ns / 1e9:.0f}s)")
