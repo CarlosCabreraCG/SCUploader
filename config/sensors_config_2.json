@@ -1,10 +1,10 @@
 {
   "options": {
-    "minutes_back": 1470,
+    "minutes_back": 5760,
     "minutes_back_end": 0,
     "interval_scheduler": 60,
-    "moving_average": true,
-    "demeaning": true,
+    "moving_average": false,
+    "demeaning": false,
     "ma_window": 5,
     "ma_max_gap_minutes": 1.0
   },

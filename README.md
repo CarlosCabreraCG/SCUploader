@@ -124,12 +124,17 @@ python main.py transfer
 python main.py transfer --minutes-back 120
 python main.py transfer --no-upload --export-csv --output-dir salida
 ```
+### Transferencia para varios .env
+```bash
+python main.py --env-file .env.p1 --env-file .env.p2 transfer
+```
 
 ### Ejecución periódica (scheduler)
 
 ```bash
 python main.py schedule
 python main.py schedule --interval 30
+python main.py --env-file .env.p1 --env-file .env.p2 schedule
 ```
 Se detiene con `Ctrl+C`.
 

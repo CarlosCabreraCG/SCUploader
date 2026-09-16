@@ -42,10 +42,26 @@ def _build_clients(creds: Credentials) -> tuple[SensorCloudClient, SensorCloudCl
     return source_client, dest_client
 
 
-def _load_all(args) -> tuple[Credentials, SensorsConfig]:
-    creds = load_credentials(getattr(args, "env_file", None))
-    config = load_sensors_config(getattr(args, "config", None))
+def _first_env_file(args) -> str | None:
+    """Para comandos de un solo dispositivo: usa el primer --env-file (o el default '.env')."""
+    env_files = getattr(args, "env_file", None)
+    return env_files[0] if env_files else None
+
+
+def _load_profile(env_file: str | None, config_override: str | None) -> tuple[Credentials, SensorsConfig]:
+    creds = load_credentials(env_file)
+    config = load_sensors_config(config_override or creds.config_file)
     return creds, config
+
+
+def _load_all(args) -> tuple[Credentials, SensorsConfig]:
+    return _load_profile(_first_env_file(args), getattr(args, "config", None))
+
+
+def _load_profiles(args) -> list[tuple[Credentials, SensorsConfig]]:
+    """Un (Credentials, SensorsConfig) por cada --env-file. Sin ninguno, un solo perfil con .env por defecto."""
+    env_files = getattr(args, "env_file", None) or [None]
+    return [_load_profile(ef, getattr(args, "config", None)) for ef in env_files]
 
 
 def _client_for_device(creds: Credentials, device: str) -> SensorCloudClient:
@@ -62,45 +78,42 @@ def _client_for_device(creds: Credentials, device: str) -> SensorCloudClient:
 # ---------------------------------------------------------------------------
 
 def cmd_transfer(args) -> None:
-    creds, config = _load_all(args)
-    source_client, dest_client = _build_clients(creds)
-
-    transfer_complex_data_between_devices(
-        source_client,
-        dest_client,
-        config,
-        minutes_back=args.minutes_back,
-        minutes_back_end=args.minutes_back_end,
-        upload_to_dest=not args.no_upload,
-        export_csv=args.export_csv,
-        csv_output_dir=args.output_dir,
-        save_to_store=not args.no_store,
-        data_dir=args.data_dir,
-    )
-    print("\n--- Proceso completado exitosamente ---")
-
+    profiles = _load_profiles(args)
+    for creds, config in profiles:
+        print(f"\n=== Perfil: origen {creds.source_device} -> destino {creds.dest_device} (config: {creds.config_file}) ===")
+        source_client, dest_client = _build_clients(creds)
+        transfer_complex_data_between_devices(
+            source_client, dest_client, config,
+            minutes_back=args.minutes_back,
+            minutes_back_end=args.minutes_back_end,
+            upload_to_dest=not args.no_upload,
+            export_csv=args.export_csv,
+            csv_output_dir=args.output_dir,
+            save_to_store=not args.no_store,
+            data_dir=args.data_dir,
+        )
+    print(f"\n--- Proceso completado exitosamente ({len(profiles)} perfil(es)) ---")
 
 def cmd_schedule(args) -> None:
-    creds, config = _load_all(args)
-    source_client, dest_client = _build_clients(creds)
+    threads = []
+    for creds, config in _load_profiles(args):
+        source_client, dest_client = _build_clients(creds)
+        interval = args.interval or config.options.interval_scheduler
+        thread = run_scheduler(
+            source_client, dest_client, config,
+            interval_seconds=args.interval,
+            minutes_back=args.minutes_back,
+            minutes_back_end=args.minutes_back_end,
+        )
+        threads.append(thread)
+        print(f"  Scheduler iniciado: {creds.source_device} -> {creds.dest_device} cada {interval}s (config: {creds.config_file})")
 
-    thread = run_scheduler(
-        source_client,
-        dest_client,
-        config,
-        interval_seconds=args.interval,
-        minutes_back=args.minutes_back,
-        minutes_back_end=args.minutes_back_end,
-    )
-    # Nota: el scheduler usa siempre save_to_store=True con el data_dir por
-    # defecto ("data/"), para que la interfaz Flet tenga datos frescos.
-    print("\nScheduler iniciado. Presiona Ctrl+C para detener.")
+    print(f"\n{len(threads)} scheduler(s) corriendo. Presiona Ctrl+C para detener.")
     try:
-        while thread.is_alive():
+        while any(t.is_alive() for t in threads):
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nDeteniendo scheduler...")
-
+        print("\nDeteniendo scheduler(s)...")
 
 def cmd_setup_nodes(args) -> None:
     creds, config = _load_all(args)
@@ -184,9 +197,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="main.py",
         description="Sincroniza y transforma datos entre dispositivos de SensorCloud.",
     )
-    parser.add_argument("--env-file", default=None, help="Ruta al archivo .env (default: .env)")
-    parser.add_argument("--config", default=None, help="Ruta al JSON de configuración (default: config/sensors_config.json)")
-
+    parser.add_argument(
+            "--env-file", action="append", default=None,
+            help="Ruta a un archivo .env (default: .env). Repetible para usar varios "
+                "dispositivos origen, p. ej.: --env-file .env.p1 --env-file .env.p2",
+        )
+    parser.add_argument("--config", default=None, help="Ruta al JSON de configuración; sobreescribe el CONFIG_FILE de cada .env")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # transfer

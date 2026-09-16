@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_CONFIG_FILE = "config/sensors_config.json"
@@ -30,7 +30,7 @@ class Credentials:
     source_device: str
     dest_device: str
     server: str = "sensorcloud.microstrain.com"
-
+    config_file: str = DEFAULT_CONFIG_FILE
 
 @dataclass
 class PipelineOptions:
@@ -78,29 +78,37 @@ class SensorsConfig:
 
 
 def load_credentials(env_file: Optional[str] = None) -> Credentials:
-    """Carga las credenciales y los IDs de dispositivo desde el archivo .env."""
-    load_dotenv(env_file or DEFAULT_ENV_FILE)
+    """Carga las credenciales y los IDs de dispositivo desde el archivo .env.
+
+    Lee el archivo indicado de forma aislada (sin mezclar os.environ entre
+    llamadas), para que cargar varios perfiles (.env.p1, .env.p2, ...) en el
+    mismo proceso no arrastre valores del perfil anterior.
+    """
+    path = env_file or DEFAULT_ENV_FILE
+    file_values = dotenv_values(path)
+    values = {**os.environ, **file_values}
 
     required = ["API_KEY_SOURCE", "API_KEY_DEST", "SOURCE_DEVICE", "DEST_DEVICE"]
-    missing = [name for name in required if not os.getenv(name)]
+    missing = [name for name in required if not values.get(name)]
     if missing:
         raise EnvironmentError(
             "Faltan variables de entorno requeridas: "
-            f"{', '.join(missing)}. Revisa tu archivo .env (ver .env.example)."
+            f"{', '.join(missing)}. Revisa el archivo '{path}' (ver .env.example)."
         )
 
     return Credentials(
-        api_key_source=os.environ["API_KEY_SOURCE"],
-        api_key_dest=os.environ["API_KEY_DEST"],
-        source_device=os.environ["SOURCE_DEVICE"],
-        dest_device=os.environ["DEST_DEVICE"],
-        server=os.getenv("SENSORCLOUD_SERVER", "sensorcloud.microstrain.com"),
+        api_key_source=values["API_KEY_SOURCE"],
+        api_key_dest=values["API_KEY_DEST"],
+        source_device=values["SOURCE_DEVICE"],
+        dest_device=values["DEST_DEVICE"],
+        server=values.get("SENSORCLOUD_SERVER", "sensorcloud.microstrain.com"),
+        config_file=values.get("CONFIG_FILE"),
     )
 
 
 def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
     """Carga el archivo JSON con el mapeo de canales, ecuaciones y opciones."""
-    path = Path(os.environ["CONFIG_FILE"]) or Path(config_file or DEFAULT_CONFIG_FILE)
+    path = Path(config_file or DEFAULT_CONFIG_FILE)
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el archivo de configuración: {path}")
 
