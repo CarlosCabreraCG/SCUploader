@@ -25,9 +25,9 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       # Genera dinámicamente el archivo .env.p1 a partir del Secreto
-      - name: Crear archivo .env.p1
-        run: echo "${{ secrets.ENV_P1 }}" > .env.p1
+      - name: Crear archivo .env.p2
+        run: echo "${{ secrets.ENV_P2 }}" > .env.p2
 
-      - name: Ejecutar script p1
+      - name: Ejecutar script p2
         run: |
-          python main.py --env-file .env.p1 transfer
+          python main.py --env-file .env.p2 transfer
