@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Actualizado a v4.2+ para soporte nativo de nuevos runtimes
       - name: Descargar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
+      # Actualizado a v5.4+ / v6
       - name: Configurar Python + Caché
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.11'
           cache: 'pip'
