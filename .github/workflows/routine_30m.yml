@@ -1,0 +1,33 @@
+name: Tarea Regular - 30 min
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-regular:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python + Caché
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar librerías
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Genera dinámicamente el archivo .env.p1 a partir del Secreto
+      - name: Crear archivo .env.p1
+        run: echo "${{ secrets.ENV_P1 }}" > .env.p1
+
+      - name: Ejecutar script p1
+        run: |
+          python main.py --env-file .env.p1 transfer

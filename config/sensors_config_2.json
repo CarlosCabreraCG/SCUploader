@@ -1,8 +1,8 @@
 {
   "options": {
-    "minutes_back": 5760,
+    "minutes_back": 60,
     "minutes_back_end": 0,
-    "interval_scheduler": 60,
+    "interval_scheduler": 1800,
     "moving_average": false,
     "demeaning": false,
     "ma_window": 5,
