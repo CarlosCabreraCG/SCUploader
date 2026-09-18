@@ -2,7 +2,7 @@ name: Tarea Regular - 30 min
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 jobs:
