@@ -1,8 +1,8 @@
 name: Tarea Diaria - 9:00 AM UTC
 
 on:
-  schedule:
-    - cron: '0 9 * * *'
+  #schedule:
+    #- cron: '0 9 * * *'
   workflow_dispatch:
 
 jobs:
