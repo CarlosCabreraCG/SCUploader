@@ -268,7 +268,35 @@ class SensorCloudClient:
             return True
         print(f"  ✗ Error eliminando puntos: {response.status} {response.reason}")
         return False
+    
+    def get_latest_data_point(self, sensor_name: str, channel_name: str) -> Optional[Tuple[int, float]]:
+        """Devuelve (timestamp_ns, valor) del último punto ya subido a un canal, o None si el canal no tiene datos todavía."""
+        self._check_authenticated()
+        conn = self._get_connection(self.server)
+        url = (
+            f"/SensorCloud/devices/{self.device_id}/sensors/{sensor_name}"
+            f"/channels/{channel_name}/streams/timeseries/data/latest/"
+            f"?version=1&auth_token={self.auth_token}"
+        )
+        headers = {"Accept": "application/xdr"}
 
+        conn.request("GET", url=url, headers=headers)
+        response = conn.getresponse()
+
+        if response.status == http.client.OK:
+            data = response.read()
+            if not data:
+                return None
+            unpacker = xdrlib.Unpacker(data)
+            timestamp = unpacker.unpack_uhyper()
+            value = unpacker.unpack_float()
+            return timestamp, value
+
+        if response.status == http.client.NOT_FOUND:
+            return None
+
+        print(f"  ✗ Error obteniendo último punto de {sensor_name}/{channel_name}: {response.status} {response.reason}")
+        return None
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -128,6 +128,11 @@ python main.py transfer --no-upload --export-csv --output-dir salida
 ```bash
 python main.py --env-file .env.p1 --env-file .env.p2 transfer
 ```
+### Transferencia desde el último punto registrado
+```bash
+python main.py --env-file .env.p1 transfer --fromlastpoint
+python main.py --env-file .env.p1 --env-file .env.p2 transfer --fromlastpoint
+```
 
 ### Ejecución periódica (scheduler)
 
@@ -135,6 +140,7 @@ python main.py --env-file .env.p1 --env-file .env.p2 transfer
 python main.py schedule
 python main.py schedule --interval 30
 python main.py --env-file .env.p1 --env-file .env.p2 schedule
+python main.py --env-file .env.p1 --env-file .env.p2 schedule --fromlastpoint
 ```
 Se detiene con `Ctrl+C`.
 

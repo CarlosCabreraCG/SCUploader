@@ -32,4 +32,4 @@ jobs:
 
       - name: Ejecutar script p2
         run: |
-          python main.py --env-file .env.p2 transfer
+          python main.py --env-file .env.p2 transfer --fromlastpoint

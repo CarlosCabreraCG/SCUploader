@@ -91,6 +91,7 @@ def cmd_transfer(args) -> None:
             csv_output_dir=args.output_dir,
             save_to_store=not args.no_store,
             data_dir=args.data_dir,
+            from_last_point=args.fromlastpoint,
         )
     print(f"\n--- Proceso completado exitosamente ({len(profiles)} perfil(es)) ---")
 
@@ -104,6 +105,7 @@ def cmd_schedule(args) -> None:
             interval_seconds=args.interval,
             minutes_back=args.minutes_back,
             minutes_back_end=args.minutes_back_end,
+            from_last_point=args.fromlastpoint,
         )
         threads.append(thread)
         print(f"  Scheduler iniciado: {creds.source_device} -> {creds.dest_device} cada {interval}s (config: {creds.config_file})")
@@ -207,6 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # transfer
     p_transfer = subparsers.add_parser("transfer", help="Ejecuta una transferencia única de datos.")
+    p_transfer.add_argument("--fromlastpoint", action="store_true", help="Usa el último punto ya subido en cada canal destino como inicio de la ventana, en vez de minutes_back/minutes_back_end (evita huecos y resubidas innecesarias).")
     p_transfer.add_argument("--minutes-back", type=int, default=None, help="Minutos hacia atrás a descargar (default: valor en config)")
     p_transfer.add_argument("--minutes-back-end", type=int, default=None, help="Offset en minutos para el fin de la ventana (default: valor en config)")
     p_transfer.add_argument("--no-upload", action="store_true", help="No subir los resultados al dispositivo destino")
@@ -218,6 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # schedule
     p_schedule = subparsers.add_parser("schedule", help="Ejecuta la transferencia periódicamente (scheduler).")
+    p_schedule.add_argument("--fromlastpoint", action="store_true", help="En cada ciclo, usa el último punto ya subido en cada canal destino como inicio, en vez de una ventana fija.")
     p_schedule.add_argument("--interval", type=int, default=None, help="Intervalo en segundos entre ejecuciones (default: valor en config)")
     p_schedule.add_argument("--minutes-back", type=int, default=None, help="Minutos hacia atrás a descargar en cada ciclo")
     p_schedule.add_argument("--minutes-back-end", type=int, default=None, help="Offset en minutos para el fin de la ventana")

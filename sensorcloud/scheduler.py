@@ -18,6 +18,7 @@ def run_scheduler(
     interval_seconds: Optional[int] = None,
     minutes_back: Optional[int] = None,
     minutes_back_end: Optional[int] = None,
+    from_last_point: bool = False,
 ) -> threading.Thread:
     """Lanza un hilo en segundo plano que ejecuta el pipeline cada `interval_seconds`."""
     interval_seconds = interval_seconds or config.options.interval_scheduler
@@ -32,6 +33,7 @@ def run_scheduler(
                     config,
                     minutes_back=minutes_back,
                     minutes_back_end=minutes_back_end,
+                    from_last_point=from_last_point,
                 )
             except Exception as e:
                 print(f"✗ Error en transferencia: {e}")

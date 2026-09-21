@@ -1,12 +1,12 @@
 {
   "options": {
-    "minutes_back":120,
-    "minutes_back_end": 0,
+    "minutes_back":7200,
+    "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
     "demeaning": false,
-    "ma_window": 5,
-    "ma_max_gap_minutes": 1.0
+    "ma_window": 5,   
+    "ma_max_gap_minutes": 1.0 
   },
 
   "sensors_channel": {

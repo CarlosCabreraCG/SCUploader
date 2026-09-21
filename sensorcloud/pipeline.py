@@ -33,6 +33,7 @@ def transfer_complex_data_between_devices(
     csv_output_dir: str = "datos_procesados",
     save_to_store: bool = True,
     data_dir: str = datastore.DEFAULT_DATA_DIR,
+    from_last_point: bool = False,
 ) -> None:
     """
     Ejecuta un ciclo completo de sincronización:
@@ -50,7 +51,24 @@ def transfer_complex_data_between_devices(
     minutes_back_end = opts.minutes_back_end if minutes_back_end is None else minutes_back_end
 
     end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
-    start_time_ns = end_time_ns - int(minutes_back * 60 * 1_000_000_000)
+    end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
+
+    last_ts_by_channel: dict = {}
+    if from_last_point:
+        print("\n--- Modo 'desde el último punto': consultando último dato en destino ---")
+        for dest_channel_path in config.output_nodes:
+            sensor_dest, channel_dest = parse_channel_path(dest_channel_path)
+            latest = dest_client.get_latest_data_point(sensor_dest, channel_dest)
+            last_ts_by_channel[dest_channel_path] = latest[0] if latest else None
+            if latest:
+                print(f"  {dest_channel_path}: último punto en {latest[0]} ({latest[1]:.4f})")
+            else:
+                print(f"  {dest_channel_path}: sin datos previos, se usará minutes_back={minutes_back} como respaldo")
+
+        known_starts = [ts for ts in last_ts_by_channel.values() if ts is not None]
+        start_time_ns = min(known_starts) if known_starts else end_time_ns - int(minutes_back * 60 * 1_000_000_000)
+    else:
+        start_time_ns = end_time_ns - int(minutes_back * 60 * 1_000_000_000)
 
     print(f"\n--- Transfiriendo datos de los últimos {minutes_back} minutos antes de {minutes_back_end} minutos ---")
     print(f"Ventana de tiempo (ns): {start_time_ns} - {end_time_ns}")
@@ -109,6 +127,7 @@ def transfer_complex_data_between_devices(
     print("\n--- PASO 3: Aplicando ecuaciones compuestas y generando salida ---")
 
     csv_dir = None
+
     if export_csv:
         import os
         from datetime import datetime
@@ -158,6 +177,16 @@ def transfer_complex_data_between_devices(
             if not upload_data:
                 print("  ⚠ Sin puntos válidos tras aplicar demeaning")
                 continue
+        if from_last_point:
+            threshold = last_ts_by_channel.get(dest_channel_path)
+            if threshold is not None:
+                before = len(upload_data)
+                upload_data = [(ts, val) for ts, val in upload_data if ts > threshold]
+                if len(upload_data) != before:
+                    print(f"  Filtrados {before - len(upload_data)} puntos ya existentes (<= último punto subido)")
+                if not upload_data:
+                    print("  ⚠ No hay puntos nuevos después del último punto ya subido; se omite este canal")
+                    continue
 
         if export_csv and csv_dir:
             import os
