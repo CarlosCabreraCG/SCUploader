@@ -20,7 +20,7 @@ Ejemplos:
 Configura las credenciales en un archivo .env (ver .env.example) y los
 canales/ecuaciones en config/sensors_config.json (ver README.md).
 """
-
+# main.py
 from __future__ import annotations
 
 import argparse
@@ -34,12 +34,24 @@ from sensorcloud.pipeline import transfer_complex_data_between_devices
 from sensorcloud.scheduler import run_scheduler
 
 
-def _build_clients(creds: Credentials) -> tuple[SensorCloudClient, SensorCloudClient]:
-    source_client = SensorCloudClient(device_id=creds.source_device, api_key=creds.api_key_source, server=creds.server)
-    dest_client = SensorCloudClient(device_id=creds.dest_device, api_key=creds.api_key_dest, server=creds.server)
-    source_client.authenticate()
+def _build_dest_clients(creds: Credentials) -> SensorCloudClient:
+    """Autentica el/los dispositivo(s) destino UNA sola vez.
+
+    De momento solo se devuelve el completo; el simple se añadirá en la parte 2.
+    """
+    dest_client = SensorCloudClient(
+        device_id=creds.dest_device, api_key=creds.api_key_dest, server=creds.server
+    )
     dest_client.authenticate()
-    return source_client, dest_client
+    return dest_client
+
+
+def _build_source_client(creds: Credentials) -> SensorCloudClient:
+    source_client = SensorCloudClient(
+        device_id=creds.source_device, api_key=creds.api_key_source, server=creds.server
+    )
+    source_client.authenticate()
+    return source_client
 
 
 def _first_env_file(args) -> str | None:
@@ -48,29 +60,35 @@ def _first_env_file(args) -> str | None:
     return env_files[0] if env_files else None
 
 
-def _load_profile(env_file: str | None, config_override: str | None) -> tuple[Credentials, SensorsConfig]:
-    creds = load_credentials(env_file)
-    config = load_sensors_config(config_override or creds.config_file)
-    return creds, config
+def _load_profile(env_file: str | None, config_override: str | None) -> list[tuple[Credentials, SensorsConfig]]:
+    """Carga un .env (puede contener varias fuentes) y devuelve un par por fuente."""
+    profiles = load_credentials(env_file)
+    result: list[tuple[Credentials, SensorsConfig]] = []
+    for creds in profiles:
+        cfg = load_sensors_config(config_override or creds.config_file)
+        result.append((creds, cfg))
+    return result
 
 
 def _load_all(args) -> tuple[Credentials, SensorsConfig]:
-    return _load_profile(_first_env_file(args), getattr(args, "config", None))
+    """Para comandos de un solo dispositivo: primer perfil del primer .env."""
+    profiles = _load_profile(_first_env_file(args), getattr(args, "config", None))
+    return profiles[0]
 
 
 def _load_profiles(args) -> list[tuple[Credentials, SensorsConfig]]:
-    """Un (Credentials, SensorsConfig) por cada --env-file. Sin ninguno, un solo perfil con .env por defecto."""
+    """Un (Credentials, SensorsConfig) por fuente, agregando todos los .env indicados."""
     env_files = getattr(args, "env_file", None) or [None]
-    return [_load_profile(ef, getattr(args, "config", None)) for ef in env_files]
+    all_profiles: list[tuple[Credentials, SensorsConfig]] = []
+    for ef in env_files:
+        all_profiles.extend(_load_profile(ef, getattr(args, "config", None)))
+    return all_profiles
 
 
 def _client_for_device(creds: Credentials, device: str) -> SensorCloudClient:
     if device == "source":
-        client = SensorCloudClient(device_id=creds.source_device, api_key=creds.api_key_source, server=creds.server)
-    else:
-        client = SensorCloudClient(device_id=creds.dest_device, api_key=creds.api_key_dest, server=creds.server)
-    client.authenticate()
-    return client
+        return _build_source_client(creds)
+    return _build_dest_clients(creds)
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +97,18 @@ def _client_for_device(creds: Credentials, device: str) -> SensorCloudClient:
 
 def cmd_transfer(args) -> None:
     profiles = _load_profiles(args)
+    if not profiles:
+        print("No hay perfiles para procesar.")
+        return
+
+    # Destino compartido: se autentica UNA sola vez.
+    dest_creds = profiles[0][0]
+    dest_client = _build_dest_clients(dest_creds)
+    print(f"\n=== Destino: {dest_creds.dest_device} (autenticado una vez) ===")
+
     for creds, config in profiles:
-        print(f"\n=== Perfil: origen {creds.source_device} -> destino {creds.dest_device} (config: {creds.config_file}) ===")
-        source_client, dest_client = _build_clients(creds)
+        print(f"\n--- Fuente: {creds.source_device} (config: {creds.config_file}) ---")
+        source_client = _build_source_client(creds)
         transfer_complex_data_between_devices(
             source_client, dest_client, config,
             minutes_back=args.minutes_back,
@@ -93,12 +120,21 @@ def cmd_transfer(args) -> None:
             data_dir=args.data_dir,
             from_last_point=args.fromlastpoint,
         )
-    print(f"\n--- Proceso completado exitosamente ({len(profiles)} perfil(es)) ---")
+    print(f"\n--- Proceso completado exitosamente ({len(profiles)} fuente(s)) ---")
+
 
 def cmd_schedule(args) -> None:
+    profiles = _load_profiles(args)
+    if not profiles:
+        print("No hay perfiles para procesar.")
+        return
+
+    dest_creds = profiles[0][0]
+    dest_client = _build_dest_clients(dest_creds)
+
     threads = []
-    for creds, config in _load_profiles(args):
-        source_client, dest_client = _build_clients(creds)
+    for creds, config in profiles:
+        source_client = _build_source_client(creds)
         interval = args.interval or config.options.interval_scheduler
         thread = run_scheduler(
             source_client, dest_client, config,
@@ -117,6 +153,7 @@ def cmd_schedule(args) -> None:
     except KeyboardInterrupt:
         print("\nDeteniendo scheduler(s)...")
 
+
 def cmd_setup_nodes(args) -> None:
     creds, config = _load_all(args)
     dest_client = _client_for_device(creds, "dest")
@@ -125,19 +162,19 @@ def cmd_setup_nodes(args) -> None:
 
 
 def cmd_delete_channel(args) -> None:
-    creds = load_credentials(args.env_file)
+    creds, _ = _load_all(args)
     client = _client_for_device(creds, args.device)
     client.delete_channel(args.sensor, args.channel)
 
 
 def cmd_delete_points(args) -> None:
-    creds = load_credentials(args.env_file)
+    creds, _ = _load_all(args)
     client = _client_for_device(creds, args.device)
     client.delete_data_points(args.sensor, args.channel, minutes_back=args.minutes_back)
 
 
 def cmd_download(args) -> None:
-    creds = load_credentials(args.env_file)
+    creds, _ = _load_all(args)
     client = _client_for_device(creds, args.device)
 
     end_time_ns = time.time_ns()
@@ -151,25 +188,21 @@ def cmd_download(args) -> None:
 
 
 def cmd_show_config(args) -> None:
-    creds, config = _load_all(args)
-    opts = config.options
-
-    print("Credenciales (.env):")
-    print(f"  Dispositivo origen:  {creds.source_device}")
-    print(f"  Dispositivo destino: {creds.dest_device}")
-    print(f"  Servidor:            {creds.server}")
-
-    print("\nConfiguración de sensores (config/sensors_config.json):")
-    print(f"  Canales fuente:      {list(config.sensors_channel.keys())}")
-    print(f"  Ecuaciones comp.:    {list(config.composite_equations.keys())}")
-    print(f"  Nodos destino:       {list(config.output_nodes.keys())}")
-
-    print("\nOpciones del pipeline:")
-    print(f"  Minutos hacia atrás: {opts.minutes_back} (fin: {opts.minutes_back_end})")
-    print(f"  Intervalo scheduler: {opts.interval_scheduler}s")
-    print(f"  Media móvil:         {opts.moving_average} (ventana={opts.ma_window})")
-    print(f"  Demeaning:           {opts.demeaning}")
-    print(f"  Gap máximo:          {opts.ma_max_gap_minutes} min")
+    profiles = _load_profiles(args)
+    for creds, config in profiles:
+        opts = config.options
+        print(f"\n=== Perfil: fuente {creds.source_device} -> destino {creds.dest_device} ===")
+        print(f"  Servidor:            {creds.server}")
+        print(f"  Config file:         {creds.config_file}")
+        print(f"  Destino simple:      {creds.dest_device_simple or '(no configurado)'}")
+        print(f"  Canales fuente:      {list(config.sensors_channel.keys())}")
+        print(f"  Ecuaciones comp.:    {list(config.composite_equations.keys())}")
+        print(f"  Nodos destino:       {list(config.output_nodes.keys())}")
+        print(f"  Minutos hacia atrás: {opts.minutes_back} (fin: {opts.minutes_back_end})")
+        print(f"  Intervalo scheduler: {opts.interval_scheduler}s")
+        print(f"  Media móvil:         {opts.moving_average} (ventana={opts.ma_window})")
+        print(f"  Demeaning:           {opts.demeaning}")
+        print(f"  Gap máximo:          {opts.ma_max_gap_minutes} min")
 
 
 # ---------------------------------------------------------------------------
@@ -182,14 +215,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Sincroniza y transforma datos entre dispositivos de SensorCloud.",
     )
     parser.add_argument(
-            "--env-file", action="append", default=None,
-            help="Ruta a un archivo .env (default: .env). Repetible para usar varios "
-                "dispositivos origen, p. ej.: --env-file .env.p1 --env-file .env.p2",
-        )
+        "--env-file", action="append", default=None,
+        help="Ruta a un archivo .env (default: .env). Repetible para combinar varios .env.",
+    )
     parser.add_argument("--config", default=None, help="Ruta al JSON de configuración; sobreescribe el CONFIG_FILE de cada .env")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # transfer
     p_transfer = subparsers.add_parser("transfer", help="Ejecuta una transferencia única de datos.")
     p_transfer.add_argument("--fromlastpoint", action="store_true", help="Usa el último punto ya subido en cada canal destino como inicio de la ventana, en vez de minutes_back/minutes_back_end (evita huecos y resubidas innecesarias).")
     p_transfer.add_argument("--minutes-back", type=int, default=None, help="Minutos hacia atrás a descargar (default: valor en config)")
