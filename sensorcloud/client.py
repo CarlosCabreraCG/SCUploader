@@ -244,30 +244,6 @@ class SensorCloudClient:
             return raw_data
         print(f"  ✗ Error descargando CSV: {response.status} {response.reason}")
         return None
-
-    def delete_data_points(self, sensor_name: str, channel_name: str = "ch1", minutes_back: int = 60) -> bool:
-        """Elimina los puntos de datos de un canal desde hace `minutes_back` minutos hasta ahora."""
-        self._check_authenticated()
-        end_time_ns = int(time.time() * 1_000_000_000)
-        start_time_ns = end_time_ns - int(minutes_back * 60 * 1_000_000_000)
-
-        url = (
-            f"/SensorCloud/devices/{self.device_id}/sensors/{sensor_name}"
-            f"/channels/{channel_name}/streams/timeseries/data/{start_time_ns}/"
-            f"?version=1&auth_token={self.auth_token}"
-        )
-        headers = {"Accept": "application/xdr"}
-        conn = self._get_connection(self.server)
-
-        print(f"  Eliminando puntos de {sensor_name}/{channel_name} desde hace {minutes_back} min...")
-        conn.request("DELETE", url=url, headers=headers)
-        response = conn.getresponse()
-
-        if response.status in (http.client.OK, http.client.NO_CONTENT):
-            print("  ✓ Puntos eliminados")
-            return True
-        print(f"  ✗ Error eliminando puntos: {response.status} {response.reason}")
-        return False
     
     def get_latest_data_point(self, sensor_name: str, channel_name: str) -> Optional[Tuple[int, float]]:
         """Devuelve (timestamp_ns, valor) del último punto ya subido a un canal, o None si el canal no tiene datos todavía."""
