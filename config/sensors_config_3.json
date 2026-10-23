@@ -1,0 +1,29 @@
+{
+  "options": {
+    "minutes_back":20,
+    "minutes_back_end":0,
+    "interval_scheduler": 15,
+    "moving_average": false,
+    "demeaning": false,
+    "ma_window": 5,   
+    "ma_max_gap_minutes": 1.0 
+  },
+
+  "sensors_channel": {
+    "38400_ch1": { "var": "a", "slope": -1.7679e-3, "offset": 13146.6787, "divisor": 5 },
+    "38400_ch3": { "var": "b", "slope": -1.7710e-3, "offset": 14330.6309, "divisor": 5 },
+    "25328_ch1": { "var": "c", "slope": 339.694e-3, "offset": -42035, "divisor": 1 }
+  },
+
+  "composite_equations": {
+    "a": "a",
+    "b": "b",
+    "c": "c*1.533"
+  },
+
+  "output_nodes": {
+    "38400P_ch1": "a",
+    "38400P_ch3": "b",
+    "25328P_ch1": "c"
+  }
+}

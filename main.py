@@ -89,7 +89,7 @@ def cmd_transfer(args) -> None:
             upload_to_dest=not args.no_upload,
             export_csv=args.export_csv,
             csv_output_dir=args.output_dir,
-            save_to_store=not args.no_store,
+            save_to_store=args.store,
             data_dir=args.data_dir,
             from_last_point=args.fromlastpoint,
         )
@@ -150,24 +150,6 @@ def cmd_download(args) -> None:
     save_to_csv(data, args.output)
 
 
-def cmd_gui(args) -> None:
-    # Import diferido: flet es opcional y solo hace falta para este comando.
-    try:
-        import flet as ft
-    except ImportError:
-        print(
-            "El paquete 'flet' no está instalado. Instálalo con:\n"
-            "  pip install flet",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    from sensorcloud.gui import build_app
-
-    view = ft.AppView.WEB_BROWSER if args.web else ft.AppView.FLET_APP
-    ft.app(target=lambda page: build_app(page, data_dir=args.data_dir), view=view)
-
-
 def cmd_show_config(args) -> None:
     creds, config = _load_all(args)
     opts = config.options
@@ -215,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_transfer.add_argument("--no-upload", action="store_true", help="No subir los resultados al dispositivo destino")
     p_transfer.add_argument("--export-csv", action="store_true", help="Exportar los resultados a CSV localmente")
     p_transfer.add_argument("--output-dir", default="datos_procesados", help="Directorio donde guardar los CSV exportados")
-    p_transfer.add_argument("--no-store", action="store_true", help="No guardar los resultados en el almacenamiento local usado por la interfaz Flet")
+    p_transfer.add_argument("--store", action="store_true", help="Guardar los resultados en el almacenamiento local usado por la interfaz Flet")
     p_transfer.add_argument("--data-dir", default="data", help="Directorio del almacenamiento local para la interfaz Flet (default: data/)")
     p_transfer.set_defaults(func=cmd_transfer)
 
@@ -258,12 +240,6 @@ def build_parser() -> argparse.ArgumentParser:
     # show-config
     p_show = subparsers.add_parser("show-config", help="Muestra un resumen de la configuración cargada.")
     p_show.set_defaults(func=cmd_show_config)
-
-    # gui
-    p_gui = subparsers.add_parser("gui", help="Abre la interfaz gráfica (Flet) para visualizar los datos ya guardados.")
-    p_gui.add_argument("--data-dir", default="data", help="Directorio del almacenamiento local a visualizar (default: data/)")
-    p_gui.add_argument("--web", action="store_true", help="Abrir la interfaz en el navegador en vez de como ventana de escritorio")
-    p_gui.set_defaults(func=cmd_gui)
 
     return parser
 

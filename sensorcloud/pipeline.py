@@ -51,7 +51,6 @@ def transfer_complex_data_between_devices(
     minutes_back_end = opts.minutes_back_end if minutes_back_end is None else minutes_back_end
 
     end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
-    end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
 
     last_ts_by_channel: dict = {}
     if from_last_point:

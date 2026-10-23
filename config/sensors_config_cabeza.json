@@ -1,0 +1,23 @@
+{
+  "options": {
+    "minutes_back":14400,
+    "minutes_back_end":0,
+    "interval_scheduler": 1800,
+    "moving_average": false,
+    "demeaning": false,
+    "ma_window": 5,   
+    "ma_max_gap_minutes": 1.0 
+  },
+
+  "sensors_channel": {
+    "57616_ch1": { "var": "p8", "slope": 1, "offset": 0, "divisor": 5 }
+  },
+
+  "composite_equations": {
+    "p8": "p8"
+  },
+
+  "output_nodes": {
+    "57616F_ch1": "p8"
+  }
+}
