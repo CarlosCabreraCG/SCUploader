@@ -253,3 +253,26 @@ transfer_complex_data_between_devices(source, dest, config)
 - Se agregó un almacenamiento local por canal (`data/`) que alimenta la
   nueva interfaz gráfica en Flet, para visualizar y exportar a Excel sin
   volver a consultar la API.
+
+## Gestión de Modal (`sensorcloud-sync`)
+
+Este proyecto se ejecuta de forma automatizada en [Modal.com](https://modal.com) mediante un trigger de tipo Cron (cada 30 minutos).
+
+### 1. Desplegar o Actualizar la App
+Cada vez que realices cambios en el código local o en este archivo de configuración, puedes actualizar la aplicación en la nube ejecutando el siguiente comando en tu terminal:
+
+```bash
+modal deploy modal_app.py
+```
+### 2. Pausar la App
+Dado que Modal ejecuta funciones programadas (como cron jobs), la forma de "pausar" la sincronización automática es eliminando la aplicación de los servidores de Modal. Esto detendrá inmediatamente las ejecuciones programadas sin perder tu código local:
+
+```bash
+modal app stop sensorcloud-sync
+```
+
+### 3. Borrar por completo
+
+```bash
+modal app delete sensorcloud-sync
+```
