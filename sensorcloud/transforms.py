@@ -7,7 +7,7 @@ Transformaciones aplicadas sobre series de tiempo (timestamp_ns, valor):
 - Ecuaciones de calibración lineales por canal.
 - Ecuaciones compuestas entre variables.
 """
-
+# sensorcloud/transforms.py
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
@@ -195,3 +195,36 @@ def evaluate_composite_series(
                 print(f"  Error evaluando ecuación en timestamp {ts}: {e}")
 
     return combined
+
+# ---------------------------------------------------------------------------
+# Resumen por intervalo (primer / máximo / mínimo / último)
+# ---------------------------------------------------------------------------
+
+def summarize_intervals(data_points: List[Point], max_gap_ns: int) -> List[Point]:
+    """
+    Reduce `data_points` a, por cada intervalo continuo, los puntos
+    relevantes para un dashboard: primer punto, máximo, mínimo y último.
+
+    - Los intervalos se detectan con el mismo criterio que la media móvil
+      (gap > max_gap_ns -> nuevo intervalo).
+    - Se preserva el timestamp original de cada punto elegido.
+    - Si varios roles caen sobre el mismo timestamp, se emite una sola vez.
+    - El resultado está ordenado por timestamp.
+    """
+    if not data_points:
+        return []
+
+    intervals = split_into_intervals(data_points, max_gap_ns)
+    summary: List[Point] = []
+
+    for interval in intervals:
+        first = interval[0]
+        last = interval[-1]
+        max_pt = max(interval, key=lambda p: p[1])
+        min_pt = min(interval, key=lambda p: p[1])
+
+        # dict por timestamp para deduplicar sin perder el orden temporal
+        picked = {first[0]: first, max_pt[0]: max_pt, min_pt[0]: min_pt, last[0]: last}
+        summary.extend(sorted(picked.values(), key=lambda p: p[0]))
+
+    return summary

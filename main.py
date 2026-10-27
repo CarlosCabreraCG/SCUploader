@@ -90,6 +90,16 @@ def _client_for_device(creds: Credentials, device: str) -> SensorCloudClient:
         return _build_source_client(creds)
     return _build_dest_clients(creds)
 
+def _build_dest_simple_client(creds: Credentials) -> SensorCloudClient | None:
+    if not creds.dest_device_simple or not creds.api_key_dest_simple:
+        return None
+    client = SensorCloudClient(
+        device_id=creds.dest_device_simple,
+        api_key=creds.api_key_dest_simple,
+        server=creds.server,
+    )
+    client.authenticate()
+    return client
 
 # ---------------------------------------------------------------------------
 # Comandos
@@ -101,19 +111,43 @@ def cmd_transfer(args) -> None:
         print("No hay perfiles para procesar.")
         return
 
-    # Destino compartido: se autentica UNA sola vez.
+    # Resolver flags de subida
+    if args.dont_upload_simple and args.only_simple:
+        raise SystemExit("✗ --dont-upload-simple y --only-simple son mutuamente excluyentes.")
+
+    upload_to_dest = not args.only_simple and not args.no_upload
+    upload_to_simple = not args.dont_upload_simple
+
     dest_creds = profiles[0][0]
-    dest_client = _build_dest_clients(dest_creds)
-    print(f"\n=== Destino: {dest_creds.dest_device} (autenticado una vez) ===")
+
+    # El completo solo se autentica si se va a usar
+    dest_client = None
+    if upload_to_dest:
+        dest_client = _build_dest_clients(dest_creds)
+        print(f"\n=== Destino completo: {dest_creds.dest_device} (autenticado una vez) ===")
+
+    dest_client_simple = None
+    if upload_to_simple:
+        if not dest_creds.dest_device_simple or not dest_creds.api_key_dest_simple:
+            raise SystemExit(
+                "✗ Se pidió subida al dispositivo simple pero faltan "
+                "DEST_DEVICE_SIMPLE y/o API_KEY_DEST_SIMPLE en el .env."
+            )
+        dest_client_simple = _build_dest_simple_client(dest_creds)
+        print(f"=== Destino simple: {dest_creds.dest_device_simple} (autenticado una vez) ===")
 
     for creds, config in profiles:
         print(f"\n--- Fuente: {creds.source_device} (config: {creds.config_file}) ---")
         source_client = _build_source_client(creds)
         transfer_complex_data_between_devices(
-            source_client, dest_client, config,
+            source_client,
+            dest_client,
+            config,
             minutes_back=args.minutes_back,
             minutes_back_end=args.minutes_back_end,
-            upload_to_dest=not args.no_upload,
+            upload_to_dest=upload_to_dest,
+            upload_to_simple=upload_to_simple,
+            dest_client_simple=dest_client_simple,
             export_csv=args.export_csv,
             csv_output_dir=args.output_dir,
             save_to_store=args.store,
@@ -156,14 +190,41 @@ def cmd_schedule(args) -> None:
 
 def cmd_setup_nodes(args) -> None:
     creds, config = _load_all(args)
-    dest_client = _client_for_device(creds, "dest")
-    create_sensors_and_channels(dest_client, list(config.output_nodes.keys()))
-    print("\n--- Nodos creados en el dispositivo destino ---")
+
+    if args.device == "source":
+        client = _build_source_client(creds)
+        label = f"origen {creds.source_device}"
+    elif args.device == "dest-simple":
+        if not creds.dest_device_simple or not creds.api_key_dest_simple:
+            raise SystemExit(
+                "✗ Faltan DEST_DEVICE_SIMPLE y/o API_KEY_DEST_SIMPLE en el .env."
+            )
+        client = _build_dest_simple_client(creds)
+        label = f"destino simple {creds.dest_device_simple}"
+    else:
+        client = _build_dest_clients(creds)
+        label = f"destino {creds.dest_device}"
+
+    create_sensors_and_channels(client, list(config.output_nodes.keys()))
+    print(f"\n--- Nodos creados en el dispositivo {label} ---")
 
 
 def cmd_delete_channel(args) -> None:
     creds, _ = _load_all(args)
-    client = _client_for_device(creds, args.device)
+    if args.device == "source":
+        client = _build_source_client(creds)
+        label = f"origen {creds.source_device}"
+    elif args.device == "dest-simple":
+        if not creds.dest_device_simple or not creds.api_key_dest_simple:
+            raise SystemExit(
+                "✗ Faltan DEST_DEVICE_SIMPLE y/o API_KEY_DEST_SIMPLE en el .env."
+            )
+        client = _build_dest_simple_client(creds)
+        label = f"destino simple {creds.dest_device_simple}"
+    else:
+        client = _build_dest_clients(creds)
+        label = f"destino {creds.dest_device}"
+    print(f"\n--- Borrando del dispositivo {label} ---")
     client.delete_channel(args.sensor, args.channel)
 
 
@@ -230,6 +291,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_transfer.add_argument("--output-dir", default="datos_procesados", help="Directorio donde guardar los CSV exportados")
     p_transfer.add_argument("--store", action="store_true", help="Guardar los resultados en el almacenamiento local usado por la interfaz Flet")
     p_transfer.add_argument("--data-dir", default="data", help="Directorio del almacenamiento local para la interfaz Flet (default: data/)")
+    p_transfer.add_argument("--dont-upload-simple", action="store_true",
+                            help="No subir la serie reducida al dispositivo simple.")
+    p_transfer.add_argument("--only-simple", action="store_true",
+                            help="Subir solo la serie reducida al dispositivo simple (no al completo).")    
     p_transfer.set_defaults(func=cmd_transfer)
 
     # schedule
@@ -242,11 +307,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     # setup-nodes
     p_setup = subparsers.add_parser("setup-nodes", help="Crea los sensores/canales de salida en el dispositivo destino.")
+    p_setup.add_argument(
+        "--device",
+        choices=["source", "dest", "dest-simple"],
+        default="dest",
+        help="Dispositivo donde crear los nodos (default: dest).",
+    )
     p_setup.set_defaults(func=cmd_setup_nodes)
 
     # delete-channel
     p_del_ch = subparsers.add_parser("delete-channel", help="Elimina un canal de un sensor.")
-    p_del_ch.add_argument("--device", choices=["source", "dest"], default="dest", help="Dispositivo objetivo (default: dest)")
+    p_del_ch.add_argument("--device", choices=["source", "dest", "dest-simple"], default="dest", help="Dispositivo objetivo (default: dest)")
     p_del_ch.add_argument("--sensor", required=True, help="Nombre del sensor")
     p_del_ch.add_argument("--channel", required=True, help="Nombre del canal")
     p_del_ch.set_defaults(func=cmd_delete_channel)
