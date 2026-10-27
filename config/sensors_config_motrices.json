@@ -1,6 +1,6 @@
 {
   "options": {
-    "minutes_back":250,
+    "minutes_back":1500,
     "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
@@ -49,5 +49,31 @@
     "57582F_ch1": "p7",
     "57611F_ch1": "p13",
     "57617F_ch1": "p14"
+  },
+  "limit_values": {
+    "54649F_ch1": "50",
+    "29372F_ch1": "28",
+    "57619T_ch1": "-",
+    "57622T_ch1": "-",
+    "57618F_ch1": "20",
+    "57621T_ch1": "-",
+    "57620T_ch1": "-",
+    "29371F_ch1": "50",
+    "57582F_ch1": "36",
+    "57611F_ch1": "25",
+    "57617F_ch1": "52"
+  },
+  "sensors_names": {
+    "54649F_ch1": "Polea 04",
+    "29372F_ch1": "Polea 02",
+    "57619T_ch1": "-",
+    "57622T_ch1": "-",
+    "57618F_ch1": "Polea 05",
+    "57621T_ch1": "-",
+    "57620T_ch1": "-",
+    "29371F_ch1": "Polea 05",
+    "57582F_ch1": "Polea 08",
+    "57611F_ch1": "Polea 09",
+    "57617F_ch1": "Polea 01"
   }
 }

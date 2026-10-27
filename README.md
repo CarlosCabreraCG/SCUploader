@@ -12,10 +12,6 @@ Este proyecto reemplaza a los tres scripts sueltos anteriores
 misma lógica de transformación. Ahora todo vive en un solo paquete
 (`sensorcloud/`) y se usa a través de `python main.py <comando>`.
 
-Incluye además una pequeña interfaz gráfica (Flet) para **visualizar**
-esos datos ya guardados: selección de canales con checkboxes, rango de
-fecha/hora, gráfico interactivo y descarga a Excel.
-
 ## Estructura del proyecto
 
 ```
@@ -27,9 +23,9 @@ sensorcloud_sync/
 │   ├── transforms.py            # Intervalos, media móvil, demeaning, calibración, ecuaciones compuestas
 │   ├── pipeline.py              # Orquesta: descargar -> calibrar -> combinar -> subir/exportar
 │   ├── scheduler.py             # Ejecución periódica del pipeline
-│   └── csv_export.py            # Exportación de series a CSV
-│   ├── datastore.py              # Almacenamiento local (CSV por canal) que lee la GUI
-│   └── gui.py                    # Interfaz Flet (visor de gráficos + descarga a Excel)
+│   ├── csv_export.py            # Exportación de series a CSV
+│   └── datastore.py              # Almacenamiento local (CSV por canal) que lee la GUI
+│   
 ├── config/
 │   └── sensors_config.json      # Canales, ecuaciones y opciones (datos NO sensibles)
 ├── data/                         # Se crea automáticamente: histórico local por canal (no subir a git)
@@ -50,11 +46,17 @@ pip install -r requirements.txt
 
 ### 1. Datos sensibles → `.env`
 
+Un solo origen: 
 Copia `.env.example` a `.env` y completa tus credenciales reales:
 
 ```bash
 cp .env.example .env
 ```
+
+Un mismo .env puede declarar una o varias fuentes. Los campos
+API_KEY_SOURCE, SOURCE_DEVICE y CONFIG_FILE son listas paralelas
+separadas por comas (deben tener el mismo número de elementos). Los
+destinos son compartidos por todas las fuentes.
 
 ```ini
 API_KEY_SOURCE=tu_api_key_origen
@@ -62,6 +64,26 @@ API_KEY_DEST=tu_api_key_destino
 SOURCE_DEVICE=W020000000198806
 DEST_DEVICE=OAPI007627ZU9AWY
 CONFIG_FILE=config/sensors_config.json
+```
+Varios orígenes en un solo .env
+
+```ini
+API_KEY_SOURCE=clave_fuente_1,clave_fuente_2,clave_fuente_3
+SOURCE_DEVICE=38401,38402,38403
+CONFIG_FILE=config/chinalco.json,config/planta_a.json,config/planta_b.json
+
+API_KEY_DEST=clave_destino_comun
+DEST_DEVICE=99999
+```
+
+Destino simple (subida doble)
+
+```ini
+API_KEY_DEST=clave_destino_completo
+DEST_DEVICE=99999
+
+API_KEY_DEST_SIMPLE=clave_destino_simple
+DEST_DEVICE_SIMPLE=99998
 ```
 
 El archivo `.env` está en `.gitignore` y nunca debe compartirse. Puedes
@@ -113,6 +135,37 @@ Este archivo (no sensible) define todo lo demás:
 
 Puedes usar un archivo de configuración distinto con `--config ruta.json`.
 
+## Subida doble
+Por defecto, transfer sube dos versiones de cada serie de salida:
+
+La serie completa (tras calibración, ecuaciones, media móvil y/o
+demeaning) al dispositivo DEST_DEVICE.
+
+Una serie reducida al dispositivo DEST_DEVICE_SIMPLE, pensada
+para dashboards: por cada intervalo continuo (mismo criterio de gap
+que la media móvil, ma_max_gap_minutes) se guardan solo el primer
+punto, el máximo, el mínimo y el último, deduplicados por timestamp
+y ordenados. Se preservan los timestamps originales, así que
+--fromlastpoint sigue funcionando de forma coherente.
+
+Flags:
+
+--dont-upload-simple: sube solo al dispositivo completo.
+
+--only-simple: sube solo al dispositivo simple (requiere
+DEST_DEVICE_SIMPLE y API_KEY_DEST_SIMPLE).
+
+Ambos son mutuamente excluyentes.
+
+En local, la serie reducida se guarda con el sufijo __simple en los
+CSV (<canal>__simple.csv) y en el datastore (<canal>__simple), para
+no mezclarse con la completa.
+
+Con --fromlastpoint y subida doble, el umbral por canal se toma del
+dispositivo completo; si el canal aún no existe allí, se cae al
+simple. Esto evita que el simple vaya por delante y bloquee puntos que
+todavía faltan en el completo.
+
 ## Uso (CLI)
 
 Todos los comandos se ejecutan como `python main.py <comando> [opciones]`.
@@ -124,6 +177,14 @@ python main.py transfer
 python main.py transfer --minutes-back 120
 python main.py transfer --no-upload --export-csv --output-dir salida
 ```
+
+### Subida doble (comportamiento por defecto cuando el .env define DEST_DEVICE_SIMPLE):
+```bash
+python main.py transfer                       # completo + simple
+python main.py transfer --dont-upload-simple  # solo completo
+python main.py transfer --only-simple         # solo simple
+```
+
 ### Transferencia para varios .env
 ```bash
 python main.py --env-file .env.p1 --env-file .env.p2 transfer
@@ -157,12 +218,6 @@ Crea, si no existen, los sensores y canales listados en `output_nodes`.
 python main.py delete-channel --device dest --sensor 16752 --channel ch1
 ```
 
-### Eliminar puntos de datos recientes
-
-```bash
-python main.py delete-points --device dest --sensor 16752 --channel ch1 --minutes-back 60
-```
-
 ### Descargar datos crudos de un canal a CSV
 
 ```bash
@@ -175,46 +230,11 @@ python main.py download --device source --sensor 16748 --channel ch1 --minutes-b
 python main.py show-config
 ```
 
-## Interfaz gráfica (Flet)
-
 `python main.py transfer` y `python main.py schedule` guardan automáticamente
 los resultados de cada nodo de salida en `data/<canal>.csv` (histórico
 local, además de subirlos a SensorCloud). La interfaz gráfica **solo lee
 esos archivos**: no vuelve a llamar a la API, así que ábrela después de
 haber corrido al menos un `transfer`.
-
-```bash
-python main.py gui
-```
-
-Esto abre una ventana de escritorio con:
-
-- **Canales**: un checkbox por cada canal con datos guardados en `data/`
-  (con un botón para recargar la lista si corriste otro `transfer` mientras
-  la interfaz estaba abierta).
-- **Rango de tiempo**: selectores de fecha y hora para el inicio y el fin
-  del período a graficar (por defecto, todo el rango disponible).
-- **Graficar**: dibuja un gráfico de líneas interactivo (con tooltip al
-  pasar el mouse) con los canales seleccionados en ese rango.
-- **Descargar Excel**: guarda los datos actualmente graficados en un
-  archivo `.xlsx` (una hoja "Combinado" con todos los canales alineados
-  por tiempo, más una hoja por canal), eligiendo la ubicación con el
-  diálogo nativo de guardado.
-
-Para abrirla en el navegador en vez de como ventana de escritorio:
-
-```bash
-python main.py gui --web
-```
-
-Para visualizar un directorio de datos distinto al por defecto (`data/`):
-
-```bash
-python main.py gui --data-dir otra_carpeta
-```
-
-> `flet`, `flet-web` (solo si usas `--web`) y `openpyxl` son necesarios
-> únicamente para este comando; el resto de la CLI funciona sin ellos.
 
 ## Uso como librería
 
@@ -250,9 +270,6 @@ transfer_complex_data_between_devices(source, dest, config)
   `setup-nodes`, `delete-channel`, `delete-points`, `download`,
   `show-config`, `gui`) en lugar de un único `main()` con flags
   hardcodeados en el código.
-- Se agregó un almacenamiento local por canal (`data/`) que alimenta la
-  nueva interfaz gráfica en Flet, para visualizar y exportar a Excel sin
-  volver a consultar la API.
 
 ## Gestión de Modal (`sensorcloud-sync`)
 
@@ -264,6 +281,7 @@ Cada vez que realices cambios en el código local o en este archivo de configura
 ```bash
 modal deploy modal_app.py
 ```
+
 ### 2. Pausar la App
 Dado que Modal ejecuta funciones programadas (como cron jobs), la forma de "pausar" la sincronización automática es eliminando la aplicación de los servidores de Modal. Esto detendrá inmediatamente las ejecuciones programadas sin perder tu código local:
 

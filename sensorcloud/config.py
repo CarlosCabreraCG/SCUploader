@@ -35,6 +35,7 @@ class Credentials:
     api_key_dest: str
     source_device: str
     dest_device: str
+    api_key_dest_simple: Optional[str] = None
     dest_device_simple: Optional[str] = None
     server: str = "sensorcloud.microstrain.com"
     config_file: str = DEFAULT_CONFIG_FILE
@@ -152,6 +153,7 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
 
     server = values.get("SENSORCLOUD_SERVER", "sensorcloud.microstrain.com")
     api_key_dest = values["API_KEY_DEST"]
+    api_key_dest_simple = values.get("API_KEY_DEST_SIMPLE") or None
     dest_device = values["DEST_DEVICE"]
     dest_device_simple = values.get("DEST_DEVICE_SIMPLE") or None
 
@@ -161,6 +163,7 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
             Credentials(
                 api_key_source=api_key_src,
                 api_key_dest=api_key_dest,
+                api_key_dest_simple=api_key_dest_simple,
                 source_device=src_dev,
                 dest_device=dest_device,
                 dest_device_simple=dest_device_simple,

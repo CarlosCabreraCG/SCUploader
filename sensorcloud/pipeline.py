@@ -4,7 +4,7 @@ origen, aplicar calibración lineal por canal, evaluar las ecuaciones
 compuestas, aplicar (opcionalmente) media móvil y demeaning, y finalmente
 subir los resultados al dispositivo destino y/o exportarlos a CSV.
 """
-
+# sensorcloud/pipeline.py
 from __future__ import annotations
 
 import time
@@ -19,16 +19,44 @@ from .transforms import (
     apply_interval_demeaning,
     apply_linear_calibration,
     evaluate_composite_series,
+    summarize_intervals,
 )
+
+
+def _latest_for_channel(
+    dest_client: Optional[SensorCloudClient],
+    dest_client_simple: Optional[SensorCloudClient],
+    dest_channel_path: str,
+) -> Optional[int]:
+    """Último timestamp subido para un canal destino.
+
+    Prioriza el dispositivo completo; si no tiene datos todavía, consulta el
+    simple. Devuelve None si ninguno tiene datos.
+    """
+    sensor, channel = parse_channel_path(dest_channel_path)
+
+    if dest_client is not None:
+        latest = dest_client.get_latest_data_point(sensor, channel)
+        if latest:
+            return latest[0]
+
+    if dest_client_simple is not None:
+        latest = dest_client_simple.get_latest_data_point(sensor, channel)
+        if latest:
+            return latest[0]
+
+    return None
 
 
 def transfer_complex_data_between_devices(
     source_client: SensorCloudClient,
-    dest_client: SensorCloudClient,
+    dest_client: Optional[SensorCloudClient],
     config: SensorsConfig,
     minutes_back: Optional[int] = None,
     minutes_back_end: Optional[int] = None,
     upload_to_dest: bool = True,
+    upload_to_simple: bool = False,
+    dest_client_simple: Optional[SensorCloudClient] = None,
     export_csv: bool = False,
     csv_output_dir: str = "datos_procesados",
     save_to_store: bool = True,
@@ -42,9 +70,9 @@ def transfer_complex_data_between_devices(
     2. Aplica la calibración lineal (slope, offset, divisor) por canal.
     3. Evalúa las ecuaciones compuestas para cada nodo de salida.
     4. Aplica media móvil centrada y/o demeaning por intervalo (opcional).
-    5. Sube los resultados al dispositivo destino, los exporta a CSV y/o
-       los guarda en el almacenamiento local (`data/`) para que la
-       interfaz Flet pueda graficarlos después.
+    5. Sube los resultados al dispositivo destino (completo y, si se pide,
+       reducido por intervalo al dispositivo simple), los exporta a CSV
+       y/o los guarda en el almacenamiento local (`data/`).
     """
     opts = config.options
     minutes_back = opts.minutes_back if minutes_back is None else minutes_back
@@ -56,11 +84,10 @@ def transfer_complex_data_between_devices(
     if from_last_point:
         print("\n--- Modo 'desde el último punto': consultando último dato en destino ---")
         for dest_channel_path in config.output_nodes:
-            sensor_dest, channel_dest = parse_channel_path(dest_channel_path)
-            latest = dest_client.get_latest_data_point(sensor_dest, channel_dest)
-            last_ts_by_channel[dest_channel_path] = latest[0] if latest else None
-            if latest:
-                print(f"  {dest_channel_path}: último punto en {latest[0]} ({latest[1]:.4f})")
+            latest_ts = _latest_for_channel(dest_client, dest_client_simple, dest_channel_path)
+            last_ts_by_channel[dest_channel_path] = latest_ts
+            if latest_ts:
+                print(f"  {dest_channel_path}: último punto en {latest_ts}")
             else:
                 print(f"  {dest_channel_path}: sin datos previos, se usará minutes_back={minutes_back} como respaldo")
 
@@ -176,6 +203,7 @@ def transfer_complex_data_between_devices(
             if not upload_data:
                 print("  ⚠ Sin puntos válidos tras aplicar demeaning")
                 continue
+
         if from_last_point:
             threshold = last_ts_by_channel.get(dest_channel_path)
             if threshold is not None:
@@ -187,17 +215,30 @@ def transfer_complex_data_between_devices(
                     print("  ⚠ No hay puntos nuevos después del último punto ya subido; se omite este canal")
                     continue
 
+        # Serie reducida (por intervalo) para el dispositivo simple
+        summary_data: list = []
+        if upload_to_simple and dest_client_simple is not None and upload_data:
+            summary_data = summarize_intervals(upload_data, opts.ma_max_gap_ns)
+            print(f"  Puntos resumen (primer/máx/mín/último por intervalo): {len(summary_data)}")
+
         if export_csv and csv_dir:
             import os
 
             safe_channel = dest_channel_path.replace("/", "_").replace("\\", "_")
             save_to_csv(upload_data, os.path.join(csv_dir, f"{safe_channel}.csv"))
+            if summary_data:
+                save_to_csv(summary_data, os.path.join(csv_dir, f"{safe_channel}__simple.csv"))
 
         if save_to_store:
             datastore.append_points(dest_channel_path, upload_data, data_dir=data_dir)
+            if summary_data:
+                datastore.append_points(f"{dest_channel_path}__simple", summary_data, data_dir=data_dir)
 
-        if upload_to_dest:
+        if upload_to_dest and dest_client is not None and upload_data:
             dest_client.upload_data(sensor_dest, channel_dest, upload_data)
+
+        if upload_to_simple and dest_client_simple is not None and summary_data:
+            dest_client_simple.upload_data(sensor_dest, channel_dest, summary_data)
 
     if export_csv and csv_dir:
         print(f"\n  📊 Todos los CSVs guardados en: {csv_dir}")

@@ -7,7 +7,7 @@ subirlos a SensorCloud puede guardarlos aquí, en un CSV por canal dentro
 de `data/`. La interfaz Flet lee de este almacenamiento local para
 graficar: no vuelve a llamar a la API de SensorCloud.
 """
-
+# sensorcloud/datastore
 from __future__ import annotations
 
 import csv

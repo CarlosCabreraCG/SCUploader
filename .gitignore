@@ -1,8 +1,10 @@
 .env
 .env*
+data/
 __pycache__/
 *.pyc
 .venv/
 venv/
 datos_procesados/
 *.egg-info/
+correos.py

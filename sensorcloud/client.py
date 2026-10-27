@@ -5,7 +5,7 @@ Consolida en una sola clase la autenticación, gestión de sensores/canales
 y subida/descarga/borrado de datos, que antes estaba duplicada casi
 idénticamente en tres scripts distintos del proyecto.
 """
-
+# sensorcloud/client.py
 from __future__ import annotations
 
 import http.client
