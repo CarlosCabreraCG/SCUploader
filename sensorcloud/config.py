@@ -1,12 +1,3 @@
-"""
-Carga de configuración de la aplicación.
-
-Datos sensibles (API keys, IDs de dispositivo) se leen desde variables de
-entorno / archivo .env. Todo lo demás (mapeo de canales, ecuaciones de
-calibración, ecuaciones compuestas, nodos destino, opciones del pipeline)
-se guarda localmente en un archivo JSON legible ("almacenamiento local").
-"""
-# sensorcloud/config
 # sensorcloud/config
 from __future__ import annotations
 
@@ -27,8 +18,7 @@ class Credentials:
     """Credenciales de un perfil.
 
     `source_device` / `api_key_source` / `config_file` identifican UNA fuente.
-    Los destinos (`dest_device`, `dest_device_simple`, `api_key_dest`) son
-    compartidos por todas las fuentes del mismo .env.
+    Los destinos son compartidos por todas las fuentes del mismo .env.
     """
 
     api_key_source: str
@@ -39,6 +29,12 @@ class Credentials:
     dest_device_simple: Optional[str] = None
     server: str = "sensorcloud.microstrain.com"
     config_file: str = DEFAULT_CONFIG_FILE
+
+    # Alertas por email (Brevo)
+    brevo_api_key: Optional[str] = None
+    brevo_sender_email: Optional[str] = None
+    brevo_sender_name: str = "SensorCloud Alerts"
+    alert_recipients: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -58,21 +54,13 @@ class PipelineOptions:
 
 @dataclass
 class SensorsConfig:
-    """
-    Almacenamiento local (no sensible) de la app:
-
-    - sensors_channel : canal fuente -> {var, slope, offset, divisor}
-    - composite_equations : grupo de variables -> ecuación compuesta
-    - output_nodes : canal destino -> grupo de variables
-    - options : parámetros del pipeline (ventanas de tiempo, media móvil, etc.)
-    """
-
     sensors_channel: Dict[str, Dict] = field(default_factory=dict)
     composite_equations: Dict[str, str] = field(default_factory=dict)
     output_nodes: Dict[str, str] = field(default_factory=dict)
+    limit_values: Dict[str, str] = field(default_factory=dict)
+    # { channel: {"nombre": str, "lado": str, "tipo": str} }  (o "-" si no aplica)
+    sensors_table: Dict[str, object] = field(default_factory=dict)
     options: PipelineOptions = field(default_factory=PipelineOptions)
-
-    # -- Vistas derivadas, usadas por el pipeline --------------------------
 
     @property
     def channel_to_var(self) -> Dict[str, str]:
@@ -87,30 +75,12 @@ class SensorsConfig:
 
 
 def _split_list(raw: Optional[str]) -> List[str]:
-    """'a,b, c' -> ['a', 'b', 'c']. Cadena vacía / None -> []."""
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
-    """Carga TODOS los perfiles de un .env.
-
-    Un solo .env puede declarar varias fuentes en listas paralelas
-    (separadas por comas):
-
-        API_KEY_SOURCE=key1,key2
-        SOURCE_DEVICE=dev1,dev2
-        CONFIG_FILE=config/a.json,config/b.json
-
-    Los destinos son compartidos:
-
-        API_KEY_DEST=...
-        DEST_DEVICE=...
-        DEST_DEVICE_SIMPLE=...   (opcional)
-
-    Devuelve una lista de `Credentials`, una por fuente.
-    """
     path = env_file or DEFAULT_ENV_FILE
     file_values = dotenv_values(path)
     values = {**os.environ, **file_values}
@@ -136,12 +106,10 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
             f"pero SOURCE_DEVICE tiene {len(source_devices)}. Deben coincidir."
         )
 
-    # CONFIG_FILE es opcional por fuente. Si no aparece, se usa el default.
     raw_configs = _split_list(values.get("CONFIG_FILE"))
     if not raw_configs:
         config_files = [DEFAULT_CONFIG_FILE] * len(source_devices)
     elif len(raw_configs) == 1 and len(source_devices) > 1:
-        # Un solo CONFIG_FILE para varias fuentes: se replica.
         config_files = raw_configs * len(source_devices)
     elif len(raw_configs) != len(source_devices):
         raise EnvironmentError(
@@ -157,6 +125,11 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
     dest_device = values["DEST_DEVICE"]
     dest_device_simple = values.get("DEST_DEVICE_SIMPLE") or None
 
+    brevo_api_key = values.get("BREVO_API_KEY") or None
+    brevo_sender_email = values.get("BREVO_SENDER_EMAIL") or None
+    brevo_sender_name = values.get("BREVO_SENDER_NAME", "SensorCloud Alerts")
+    alert_recipients = _split_list(values.get("ALERT_RECIPIENTS"))
+
     profiles: List[Credentials] = []
     for api_key_src, src_dev, cfg in zip(api_keys_source, source_devices, config_files):
         profiles.append(
@@ -169,13 +142,16 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
                 dest_device_simple=dest_device_simple,
                 server=server,
                 config_file=cfg,
+                brevo_api_key=brevo_api_key,
+                brevo_sender_email=brevo_sender_email,
+                brevo_sender_name=brevo_sender_name,
+                alert_recipients=alert_recipients,
             )
         )
     return profiles
 
 
 def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
-    """Carga el archivo JSON con el mapeo de canales, ecuaciones y opciones."""
     path = Path(config_file or DEFAULT_CONFIG_FILE)
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el archivo de configuración: {path}")
@@ -202,5 +178,7 @@ def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
         sensors_channel=data["sensors_channel"],
         composite_equations=data["composite_equations"],
         output_nodes=data["output_nodes"],
+        limit_values=data.get("limit_values", {}),
+        sensors_table=data.get("sensors_table", {}),
         options=options,
     )

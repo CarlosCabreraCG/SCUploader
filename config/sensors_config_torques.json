@@ -1,6 +1,6 @@
 {
   "options": {
-    "minutes_back":4350,
+    "minutes_back":0,
     "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
@@ -24,7 +24,7 @@
     "57620T_ch1": "p6t2"
   },
   "limit_values": {
-    "57619T_ch1": "p4t1",
-    "57620T_ch1": "p6t2"
+    "57619T_ch1": "10",
+    "57620T_ch1": "10"
   }
 }

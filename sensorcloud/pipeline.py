@@ -1,16 +1,11 @@
-"""
-Orquestación del flujo principal: descargar datos crudos del dispositivo
-origen, aplicar calibración lineal por canal, evaluar las ecuaciones
-compuestas, aplicar (opcionalmente) media móvil y demeaning, y finalmente
-subir los resultados al dispositivo destino y/o exportarlos a CSV.
-"""
 # sensorcloud/pipeline.py
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import List, Optional
 
 from . import datastore
+from .alerts import Violation, collect_violations
 from .client import SensorCloudClient, parse_channel_path
 from .config import SensorsConfig
 from .csv_export import save_to_csv
@@ -28,11 +23,6 @@ def _latest_for_channel(
     dest_client_simple: Optional[SensorCloudClient],
     dest_channel_path: str,
 ) -> Optional[int]:
-    """Último timestamp subido para un canal destino.
-
-    Prioriza el dispositivo completo; si no tiene datos todavía, consulta el
-    simple. Devuelve None si ninguno tiene datos.
-    """
     sensor, channel = parse_channel_path(dest_channel_path)
 
     if dest_client is not None:
@@ -62,17 +52,13 @@ def transfer_complex_data_between_devices(
     save_to_store: bool = True,
     data_dir: str = datastore.DEFAULT_DATA_DIR,
     from_last_point: bool = False,
-) -> None:
+    check_limits: bool = False,
+) -> List[Violation]:
     """
-    Ejecuta un ciclo completo de sincronización:
-
-    1. Descarga los canales fuente necesarios del dispositivo origen.
-    2. Aplica la calibración lineal (slope, offset, divisor) por canal.
-    3. Evalúa las ecuaciones compuestas para cada nodo de salida.
-    4. Aplica media móvil centrada y/o demeaning por intervalo (opcional).
-    5. Sube los resultados al dispositivo destino (completo y, si se pide,
-       reducido por intervalo al dispositivo simple), los exporta a CSV
-       y/o los guarda en el almacenamiento local (`data/`).
+    Ejecuta un ciclo completo de sincronización y, si `check_limits` es True,
+    devuelve la lista de violaciones de pico-pico (una por intervalo que
+    supera el límite de su canal). El envío del email se hace fuera, en
+    main.py, para agregar violaciones de todas las fuentes en un solo correo.
     """
     opts = config.options
     minutes_back = opts.minutes_back if minutes_back is None else minutes_back
@@ -103,9 +89,7 @@ def transfer_complex_data_between_devices(
     if opts.demeaning:
         print(f"Demeaning por intervalo activado (gap_max={opts.ma_max_gap_ns / 1e9:.0f}s)")
 
-    # ------------------------------------------------------------------
-    # PASO 1: Descargar los canales fuente necesarios
-    # ------------------------------------------------------------------
+    # PASO 1
     print("\n--- PASO 1: Descargando datos crudos ---")
 
     needed_vars = set()
@@ -131,9 +115,7 @@ def transfer_complex_data_between_devices(
         data = source_client.download_data_xdr(sensor, channel, start_time_ns, end_time_ns)
         raw_data[src_channel] = data or []
 
-    # ------------------------------------------------------------------
-    # PASO 2: Calibración lineal por canal
-    # ------------------------------------------------------------------
+    # PASO 2
     print("\n--- PASO 2: Aplicando calibración lineal ---")
     calibrated_data = apply_linear_calibration(raw_data, config.channel_calibration)
 
@@ -147,13 +129,10 @@ def transfer_complex_data_between_devices(
                 "data_points": data,
             }
 
-    # ------------------------------------------------------------------
-    # PASO 3: Ecuaciones compuestas + media móvil + demeaning + salida
-    # ------------------------------------------------------------------
+    # PASO 3
     print("\n--- PASO 3: Aplicando ecuaciones compuestas y generando salida ---")
 
     csv_dir = None
-
     if export_csv:
         import os
         from datetime import datetime
@@ -162,6 +141,9 @@ def transfer_complex_data_between_devices(
         csv_dir = f"{csv_output_dir}/ejecucion_{timestamp_str}"
         os.makedirs(csv_dir, exist_ok=True)
         print(f"  📁 Guardando CSVs en: {csv_dir}")
+
+    violations: List[Violation] = []
+    warned_ignored: set = set()
 
     for dest_channel_path, var_group in config.output_nodes.items():
         sensor_dest, channel_dest = parse_channel_path(dest_channel_path)
@@ -215,11 +197,16 @@ def transfer_complex_data_between_devices(
                     print("  ⚠ No hay puntos nuevos después del último punto ya subido; se omite este canal")
                     continue
 
-        # Serie reducida (por intervalo) para el dispositivo simple
         summary_data: list = []
         if upload_to_simple and dest_client_simple is not None and upload_data:
             summary_data = summarize_intervals(upload_data, opts.ma_max_gap_ns)
             print(f"  Puntos resumen (primer/máx/mín/último por intervalo): {len(summary_data)}")
+
+        # Evaluación de límites sobre la serie resumen (si aplica).
+        if check_limits and summary_data:
+            violations.extend(
+                collect_violations(config, dest_channel_path, summary_data, warned_ignored)
+            )
 
         if export_csv and csv_dir:
             import os
@@ -242,3 +229,5 @@ def transfer_complex_data_between_devices(
 
     if export_csv and csv_dir:
         print(f"\n  📊 Todos los CSVs guardados en: {csv_dir}")
+
+    return violations

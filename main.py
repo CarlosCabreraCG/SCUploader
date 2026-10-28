@@ -1,25 +1,3 @@
-#!/usr/bin/env python3
-"""
-SensorCloud Sync - CLI
-=======================
-
-Herramienta de línea de comandos para sincronizar datos entre dispositivos
-de MicroStrain SensorCloud, aplicando calibración lineal y ecuaciones
-compuestas definidas en config/sensors_config.json.
-
-Ejemplos:
-    python main.py transfer
-    python main.py transfer --minutes-back 120 --no-upload --export-csv
-    python main.py schedule --interval 60
-    python main.py setup-nodes
-    python main.py delete-channel --device dest --sensor 16752 --channel ch1
-    python main.py delete-points --device dest --sensor 16752 --channel ch1 --minutes-back 60
-    python main.py download --device source --sensor 16748 --channel ch1 --minutes-back 60 --output datos.csv
-    python main.py show-config
-
-Configura las credenciales en un archivo .env (ver .env.example) y los
-canales/ecuaciones en config/sensors_config.json (ver README.md).
-"""
 # main.py
 from __future__ import annotations
 
@@ -27,6 +5,7 @@ import argparse
 import sys
 import time
 
+from sensorcloud.alerts import send_email
 from sensorcloud.client import SensorCloudClient, create_sensors_and_channels, parse_channel_path
 from sensorcloud.config import Credentials, SensorsConfig, load_credentials, load_sensors_config
 from sensorcloud.csv_export import save_to_csv
@@ -118,6 +97,14 @@ def cmd_transfer(args) -> None:
     upload_to_dest = not args.only_simple and not args.no_upload
     upload_to_simple = not args.dont_upload_simple
 
+    send_email_flag = args.send_email
+    check_limits = send_email_flag and upload_to_simple
+
+    if send_email_flag and not upload_to_simple:
+        print("  ⚠ --send-email se ignora porque --dont-upload-simple está activo.")
+    if check_limits:
+        print("  ✉ Alertas por email activadas (se evaluarán límites de pico-pico).")
+
     dest_creds = profiles[0][0]
 
     # El completo solo se autentica si se va a usar
@@ -136,10 +123,11 @@ def cmd_transfer(args) -> None:
         dest_client_simple = _build_dest_simple_client(dest_creds)
         print(f"=== Destino simple: {dest_creds.dest_device_simple} (autenticado una vez) ===")
 
+    all_violations = []
     for creds, config in profiles:
         print(f"\n--- Fuente: {creds.source_device} (config: {creds.config_file}) ---")
         source_client = _build_source_client(creds)
-        transfer_complex_data_between_devices(
+        violations = transfer_complex_data_between_devices(
             source_client,
             dest_client,
             config,
@@ -153,7 +141,16 @@ def cmd_transfer(args) -> None:
             save_to_store=args.store,
             data_dir=args.data_dir,
             from_last_point=args.fromlastpoint,
+            check_limits=check_limits,
         )
+        all_violations.extend(violations)
+
+    if check_limits and all_violations:
+        print(f"\n--- Enviando email de alerta ({len(all_violations)} violación(es)) ---")
+        send_email(dest_creds, all_violations)
+    elif check_limits:
+        print("\n--- Sin violaciones de pico-pico; no se envía email ---")
+
     print(f"\n--- Proceso completado exitosamente ({len(profiles)} fuente(s)) ---")
 
 
@@ -259,6 +256,8 @@ def cmd_show_config(args) -> None:
         print(f"  Canales fuente:      {list(config.sensors_channel.keys())}")
         print(f"  Ecuaciones comp.:    {list(config.composite_equations.keys())}")
         print(f"  Nodos destino:       {list(config.output_nodes.keys())}")
+        print(f"  Límites definidos:   {list(config.limit_values.keys())}")
+        print(f"  Nombres de sensores: {list(config.sensors_names.keys())}")
         print(f"  Minutos hacia atrás: {opts.minutes_back} (fin: {opts.minutes_back_end})")
         print(f"  Intervalo scheduler: {opts.interval_scheduler}s")
         print(f"  Media móvil:         {opts.moving_average} (ventana={opts.ma_window})")
@@ -293,8 +292,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_transfer.add_argument("--data-dir", default="data", help="Directorio del almacenamiento local para la interfaz Flet (default: data/)")
     p_transfer.add_argument("--dont-upload-simple", action="store_true",
                             help="No subir la serie reducida al dispositivo simple.")
-    p_transfer.add_argument("--only-simple", action="store_true",
-                            help="Subir solo la serie reducida al dispositivo simple (no al completo).")    
+    p_transfer.add_argument("--only-simple", action="store_true",help="Subir solo la serie reducida al dispositivo simple (no al completo).")
+    p_transfer.add_argument("--send-email", action="store_true", help="Evaluar límites de pico-pico por intervalo y enviar un email agregado si se superan (requiere subida al simple).")
     p_transfer.set_defaults(func=cmd_transfer)
 
     # schedule

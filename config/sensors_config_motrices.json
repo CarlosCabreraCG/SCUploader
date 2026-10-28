@@ -1,6 +1,6 @@
 {
   "options": {
-    "minutes_back":1500,
+    "minutes_back":60,
     "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
@@ -26,11 +26,11 @@
   "composite_equations": {
     "p3": "p3",
     "p4": "p4",
-    "p4t1": "p4t1*2208.67",
-    "p4t2": "p4t2*2208.67",
+    "p4t1": "p4t1*-2.20867",
+    "p4t2": "p4t2*2.20867",
     "p5": "p5",
-    "p6t1": "p6t1*2208.67",
-    "p6t2": "p6t2*2208.67",
+    "p6t1": "p6t1*2.20867",
+    "p6t2": "p6t2*-2.20867",
     "p6": "p6",
     "p7": "p7",
     "p13": "p13",
@@ -59,21 +59,21 @@
     "57621T_ch1": "-",
     "57620T_ch1": "-",
     "29371F_ch1": "50",
-    "57582F_ch1": "36",
+    "57582F_ch1": "90",
     "57611F_ch1": "25",
     "57617F_ch1": "52"
   },
-  "sensors_names": {
-    "54649F_ch1": "Polea 04",
-    "29372F_ch1": "Polea 02",
+  "sensors_table": {
+    "54649F_ch1": { "nombre": "Polea 03", "lado": "Izquierda", "tipo": "flexión" },
+    "29372F_ch1": { "nombre": "Polea 04", "lado": "Derecha", "tipo": "flexión" },
     "57619T_ch1": "-",
     "57622T_ch1": "-",
-    "57618F_ch1": "Polea 05",
+    "57618F_ch1": { "nombre": "Polea 05", "lado": "Izquiera", "tipo": "flexión" },
     "57621T_ch1": "-",
     "57620T_ch1": "-",
-    "29371F_ch1": "Polea 05",
-    "57582F_ch1": "Polea 08",
-    "57611F_ch1": "Polea 09",
-    "57617F_ch1": "Polea 01"
+    "29371F_ch1": { "nombre": "Polea 06", "lado": "Derecha", "tipo": "flexión" },
+    "57582F_ch1": { "nombre": "Polea 07", "lado": "Izquierda", "tipo": "flexión" },
+    "57611F_ch1": { "nombre": "Polea 13", "lado": "Derecha", "tipo": "flexión" },
+    "57617F_ch1": { "nombre": "Polea 14", "lado": "Derecha", "tipo": "flexión" }
   }
 }

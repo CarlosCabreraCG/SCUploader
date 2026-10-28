@@ -1,6 +1,6 @@
 {
   "options": {
-    "minutes_back":7230,
+    "minutes_back":60,
     "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
@@ -19,5 +19,11 @@
 
   "output_nodes": {
     "38401F_ch1": "p1"
+  },
+  "limit_values": {
+    "38401_ch1": "54.4"
+  },
+  "sensors_names": {
+    "38401_ch1": { "nombre": "Polea de Cola", "lado": "Derecha", "tipo": "flexión" }
   }
 }
