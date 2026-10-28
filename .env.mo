@@ -9,4 +9,4 @@ DEST_DEVICE_SIMPLE=OAPI008XTIO9HSM4
 # Fuentes (lista paralela)
 API_KEY_SOURCE=a881eb18f04d516ae4df6c4888c9d1f7e8e029d87a68c5bc94356b28c9b2157e
 SOURCE_DEVICE=W020000000238882
-CONFIG_FILE=config/sensors_config_torques.json
+CONFIG_FILE=config/sensors_config_torques2.json

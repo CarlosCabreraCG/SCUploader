@@ -216,6 +216,7 @@ Crea, si no existen, los sensores y canales listados en `output_nodes`.
 
 ```bash
 python main.py delete-channel --device dest --sensor 16752 --channel ch1
+python main.py --env-file .env.mo delete-channel --device dest --sensor 57619T --channel ch1
 ```
 
 ### Descargar datos crudos de un canal a CSV

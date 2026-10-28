@@ -1,0 +1,27 @@
+{
+  "options": {
+    "minutes_back":0,
+    "minutes_back_end":0,
+    "interval_scheduler": 1800,
+    "moving_average": false,
+    "demeaning": false,
+    "ma_window": 5,   
+    "ma_max_gap_minutes": 1.0 
+  },
+
+  "sensors_channel": {
+    "57622_ch1": { "var": "p4t2", "slope": 1, "offset": 0, "divisor": 1 }
+
+  },
+
+  "composite_equations": {
+    "p4t2": "p4t2*2.20867"
+  },
+
+  "output_nodes": {
+    "57622T_ch1": "p4t2"
+  },
+  "limit_values": {
+   "57622T_ch1": "10"
+  }
+}
