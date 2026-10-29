@@ -1,6 +1,6 @@
 {
   "options": {
-    "minutes_back":0,
+    "minutes_back":2950,
     "minutes_back_end":0,
     "interval_scheduler": 1800,
     "moving_average": false,
@@ -11,16 +11,22 @@
 
   "sensors_channel": {
     "57619_ch1": { "var": "p4t1", "slope": 1, "offset": 0, "divisor": 1 },
+    "57622_ch1": { "var": "p4t2", "slope": 1, "offset": 0, "divisor": 1 },
+    "57621_ch1": { "var": "p6t1", "slope": 1, "offset": 0, "divisor": 1 },
     "57620_ch1": { "var": "p6t2", "slope": 1, "offset": 0, "divisor": 1 }
   },
 
   "composite_equations": {
     "p4t1": "p4t1*-2.20867",
+    "p4t2": "p4t2*2.20867",
+    "p6t1": "p6t1*2.20867",
     "p6t2": "p6t2*-2.20867"
   },
 
   "output_nodes": {
     "57619T_ch1": "p4t1",
+    "57622T_ch1": "p4t2",
+    "57621T_ch1": "p6t1",
     "57620T_ch1": "p6t2"
   },
   "limit_values": {
