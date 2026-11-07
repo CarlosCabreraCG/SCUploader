@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -12,15 +13,13 @@ from dotenv import dotenv_values
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_CONFIG_FILE = "config/sensors_config.json"
 
+PROCESS_METRICS = {"PROM", "PP", "MAX", "MIN", "START", "END"}
+_TOKEN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*_[A-Za-z]+$")
+_GROUP_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)_(PROM|PP|MAX|MIN|START|END)$")
+
 
 @dataclass
 class Credentials:
-    """Credenciales de un perfil.
-
-    `source_device` / `api_key_source` / `config_file` identifican UNA fuente.
-    Los destinos son compartidos por todas las fuentes del mismo .env.
-    """
-
     api_key_source: str
     api_key_dest: str
     source_device: str
@@ -30,7 +29,6 @@ class Credentials:
     server: str = "sensorcloud.microstrain.com"
     config_file: str = DEFAULT_CONFIG_FILE
 
-    # Alertas por email (Brevo)
     brevo_api_key: Optional[str] = None
     brevo_sender_email: Optional[str] = None
     brevo_sender_name: str = "SensorCloud Alerts"
@@ -56,9 +54,9 @@ class PipelineOptions:
 class SensorsConfig:
     sensors_channel: Dict[str, Dict] = field(default_factory=dict)
     composite_equations: Dict[str, str] = field(default_factory=dict)
+    process_equations: Dict[str, str] = field(default_factory=dict)
     output_nodes: Dict[str, str] = field(default_factory=dict)
     limit_values: Dict[str, str] = field(default_factory=dict)
-    # { channel: {"nombre": str, "lado": str, "tipo": str} }  (o "-" si no aplica)
     sensors_table: Dict[str, object] = field(default_factory=dict)
     options: PipelineOptions = field(default_factory=PipelineOptions)
 
@@ -151,6 +149,68 @@ def load_credentials(env_file: Optional[str] = None) -> List[Credentials]:
     return profiles
 
 
+def _extract_vars_from_formula(equation: str, where: str) -> List[str]:
+    """Devuelve todos los tokens con forma <var>_<METRIC> que aparecen en la fórmula."""
+    # Tokenizar por caracteres no identificadores (operadores, espacios, paréntesis)
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", equation)
+    vars_used: List[str] = []
+    for tok in tokens:
+        if not _TOKEN_RE.match(tok):
+            raise ValueError(
+                f"{where}: token '{tok}' inválido. Usa siempre <var>_<METRIC> "
+                f"con METRIC ∈ {sorted(PROCESS_METRICS)}."
+            )
+        var, metric = tok.rsplit("_", 1)
+        if metric not in PROCESS_METRICS:
+            raise ValueError(
+                f"{where}: token '{tok}' tiene métrica '{metric}' no permitida. "
+                f"Permitidas: {sorted(PROCESS_METRICS)}."
+            )
+        if var not in vars_used:
+            vars_used.append(var)
+    return vars_used
+
+
+def _validate_process_equations(config: SensorsConfig) -> None:
+    known_vars = set(config.channel_to_var.values())
+
+    if not config.process_equations:
+        return
+
+    # Grupo <var>_<METRIC>
+    for group_name in config.process_equations:
+        m = _GROUP_RE.match(group_name)
+        if not m:
+            raise ValueError(
+                f"process_equations['{group_name}']: nombre inválido. "
+                f"Debe ser '<var>_<METRIC>' con METRIC ∈ {sorted(PROCESS_METRICS)}."
+            )
+        principal_var = m.group(1)
+        if principal_var not in known_vars:
+            raise ValueError(
+                f"process_equations['{group_name}']: la variable principal '{principal_var}' "
+                f"no existe en sensors_channel."
+            )
+
+    # Tokens de cada fórmula
+    for group_name, equation in config.process_equations.items():
+        used_vars = _extract_vars_from_formula(equation, f"process_equations['{group_name}']")
+        for v in used_vars:
+            if v not in known_vars:
+                raise ValueError(
+                    f"process_equations['{group_name}']: la variable '{v}' "
+                    f"no existe en sensors_channel."
+                )
+
+    # Disjunción con composite_equations
+    overlap = set(config.composite_equations) & set(config.process_equations)
+    if overlap:
+        raise ValueError(
+            f"Los siguientes grupos están en composite_equations y process_equations a la vez: "
+            f"{sorted(overlap)}"
+        )
+
+
 def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
     path = Path(config_file or DEFAULT_CONFIG_FILE)
     if not path.exists():
@@ -174,11 +234,14 @@ def load_sensors_config(config_file: Optional[str] = None) -> SensorsConfig:
         ma_max_gap_minutes=options_data.get("ma_max_gap_minutes", 1.0),
     )
 
-    return SensorsConfig(
+    cfg = SensorsConfig(
         sensors_channel=data["sensors_channel"],
         composite_equations=data["composite_equations"],
+        process_equations=data.get("process_equations", {}),
         output_nodes=data["output_nodes"],
         limit_values=data.get("limit_values", {}),
         sensors_table=data.get("sensors_table", {}),
         options=options,
     )
+    _validate_process_equations(cfg)
+    return cfg

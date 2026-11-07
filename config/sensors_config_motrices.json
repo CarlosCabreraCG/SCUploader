@@ -1,17 +1,17 @@
 {
   "options": {
-    "minutes_back":60,
-    "minutes_back_end":0,
+    "minutes_back": 1140,
+    "minutes_back_end": 1080,
     "interval_scheduler": 1800,
     "moving_average": false,
     "demeaning": false,
-    "ma_window": 5,   
-    "ma_max_gap_minutes": 1.0 
+    "ma_window": 5,
+    "ma_max_gap_minutes": 1.0
   },
-
+  
   "sensors_channel": {
     "54649_ch1": { "var": "p3", "slope": 1, "offset": 0, "divisor": 5 },
-    "29372_ch1": { "var": "p4", "slope": 1, "offset": 0, "divisor": 5 }, 
+    "29372_ch1": { "var": "p4", "slope": 1, "offset": 0, "divisor": 5 },
     "57619_ch1": { "var": "p4t1", "slope": 1, "offset": 0, "divisor": 1 },
     "57622_ch1": { "var": "p4t2", "slope": 1, "offset": 0, "divisor": 1 },
     "57618_ch1": { "var": "p5", "slope": 1, "offset": 0, "divisor": 5 },
@@ -22,29 +22,29 @@
     "57611_ch1": { "var": "p13", "slope": 1, "offset": 0, "divisor": 5 },
     "57617_ch1": { "var": "p14", "slope": 1, "offset": 0, "divisor": 5 }
   },
-
   "composite_equations": {
     "p3": "p3",
     "p4": "p4",
-    "p4t1": "p4t1*-2.20867",
-    "p4t2": "p4t2*2.20867",
     "p5": "p5",
-    "p6t1": "p6t1*2.20867",
-    "p6t2": "p6t2*-2.20867",
     "p6": "p6",
     "p7": "p7",
     "p13": "p13",
     "p14": "p14"
   },
-
+  "process_equations":{
+   "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+65", 
+   "p4t2_PROM": "p4t1_PROM+p4_PP+p4_PROM+110", 
+   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM+44", 
+   "p6t2_PROM": "-p6t1_PROM+p6_PP+p6_PROM+140"
+  },
   "output_nodes": {
     "54649F_ch1": "p3",
     "29372F_ch1": "p4",
-    "57619T_ch1": "p4t1",
-    "57622T_ch1": "p4t2",
+    "57619T_ch1": "p4t1_PROM",
+    "57622T_ch1": "p4t2_PROM",
     "57618F_ch1": "p5",
-    "57621T_ch1": "p6t1",
-    "57620T_ch1": "p6t2",
+    "57621T_ch1": "p6t1_PROM",
+    "57620T_ch1": "p6t1_PROM",
     "29371F_ch1": "p6",
     "57582F_ch1": "p7",
     "57611F_ch1": "p13",
@@ -64,16 +64,16 @@
     "57617F_ch1": "52"
   },
   "sensors_table": {
-    "54649F_ch1": { "nombre": "Polea 03", "lado": "Izquierda", "tipo": "flexión" },
-    "29372F_ch1": { "nombre": "Polea 04", "lado": "Derecha", "tipo": "flexión" },
+    "54649F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "29372F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
     "57619T_ch1": "-",
     "57622T_ch1": "-",
-    "57618F_ch1": { "nombre": "Polea 05", "lado": "Izquiera", "tipo": "flexión" },
+    "57618F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
     "57621T_ch1": "-",
     "57620T_ch1": "-",
-    "29371F_ch1": { "nombre": "Polea 06", "lado": "Derecha", "tipo": "flexión" },
-    "57582F_ch1": { "nombre": "Polea 07", "lado": "Izquierda", "tipo": "flexión" },
-    "57611F_ch1": { "nombre": "Polea 13", "lado": "Derecha", "tipo": "flexión" },
-    "57617F_ch1": { "nombre": "Polea 14", "lado": "Derecha", "tipo": "flexión" }
+    "29371F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "57582F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "57611F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "57617F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" }
   }
 }

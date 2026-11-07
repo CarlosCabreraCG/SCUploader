@@ -1,12 +1,3 @@
-"""
-Transformaciones aplicadas sobre series de tiempo (timestamp_ns, valor):
-
-- División en intervalos continuos (para respetar huecos de datos).
-- Media móvil centrada.
-- "Demeaning" por intervalo (centrar cada intervalo en su punto medio).
-- Ecuaciones de calibración lineales por canal.
-- Ecuaciones compuestas entre variables.
-"""
 # sensorcloud/transforms.py
 from __future__ import annotations
 
@@ -14,19 +5,14 @@ from typing import Dict, List, Tuple
 
 Point = Tuple[int, float]
 
+PROCESS_TOLERANCE_NS = 5 * 1_000_000_000  # ±5 s para casar tStart entre variables
+
 
 # ---------------------------------------------------------------------------
 # Intervalos continuos
 # ---------------------------------------------------------------------------
 
 def split_into_intervals(data_points: List[Point], max_gap_ns: int) -> List[List[Point]]:
-    """
-    Divide `data_points` en intervalos continuos.
-
-    Dos puntos consecutivos pertenecen al mismo intervalo si la diferencia
-    entre sus timestamps es <= max_gap_ns; en caso contrario se considera
-    un corte y empieza un nuevo intervalo.
-    """
     if not data_points:
         return []
     intervals: List[List[Point]] = []
@@ -42,7 +28,7 @@ def split_into_intervals(data_points: List[Point], max_gap_ns: int) -> List[List
 
 
 # ---------------------------------------------------------------------------
-# Media móvil + demeaning
+# Media móvil + demeaning (composite)
 # ---------------------------------------------------------------------------
 
 def apply_centered_moving_average(
@@ -50,14 +36,6 @@ def apply_centered_moving_average(
     window: int = 5,
     max_gap_ns: int = 60 * 1_000_000_000,
 ) -> List[Point]:
-    """
-    Aplica una media móvil centrada de tamaño `window` respetando discontinuidades.
-
-    - Divide los datos en intervalos continuos (gap > max_gap_ns -> nuevo intervalo).
-    - Dentro de cada intervalo calcula la media centrada; descarta los
-      `window // 2` puntos de cada extremo donde no hay suficientes vecinos.
-    - Intervalos con menos puntos que `window` se descartan por completo.
-    """
     if not data_points:
         return []
 
@@ -84,19 +62,10 @@ def apply_centered_moving_average(
         for i in range(half, n - half):
             avg = sum(interval[j][1] for j in range(i - half, i + half + 1)) / window
             result.append((interval[i][0], avg))
-
     return result
 
 
 def apply_interval_demeaning(data_points: List[Point], max_gap_ns: int = 60 * 1_000_000_000) -> List[Point]:
-    """
-    Centra cada intervalo continuo en el punto medio de su rango de valores
-    (resta (max + min) / 2 a cada punto del intervalo).
-
-    Los intervalos se detectan con el mismo criterio de gap que la media
-    móvil, sobre los `data_points` recibidos (que típicamente ya son el
-    resultado de aplicar la media móvil centrada).
-    """
     if not data_points:
         return []
 
@@ -109,25 +78,17 @@ def apply_interval_demeaning(data_points: List[Point], max_gap_ns: int = 60 * 1_
         center = (max(values) + min(values)) / 2
         for ts, val in interval:
             result.append((ts, val - center))
-
     return result
 
 
 # ---------------------------------------------------------------------------
-# Ecuaciones de calibración (lineales) y compuestas
+# Calibración y composite
 # ---------------------------------------------------------------------------
 
 def apply_linear_calibration(
     data_dict: Dict[str, List[Point]],
     channel_calibration: Dict[str, Dict[str, float]],
 ) -> Dict[str, List[Point]]:
-    """
-    Aplica, por canal, la ecuación de calibración lineal
-    `(slope * valor + offset) / divisor`.
-
-    `channel_calibration` tiene la forma:
-        {"16748_ch1": {"slope": -1.7612e-3, "offset": 12452.0176, "divisor": 5}, ...}
-    """
     transformed: Dict[str, List[Point]] = {}
     for channel, data_points in data_dict.items():
         calib = channel_calibration.get(channel)
@@ -149,12 +110,6 @@ def apply_linear_calibration(
 
 
 def compile_composite_equation(equation: str, variables: List[str]):
-    """
-    Compila una ecuación compuesta (p. ej. "(a + 0.3*c) / (1 - 0.09)") en una
-    función que recibe las variables como argumentos con nombre.
-    """
-    # Restringimos el espacio de nombres disponible al evaluar la ecuación
-    # para evitar acceso accidental a builtins u otros globales.
     safe_globals = {"__builtins__": {}}
     return eval(f"lambda {','.join(variables)}: {equation}", safe_globals)
 
@@ -164,10 +119,6 @@ def evaluate_composite_series(
     variables: List[str],
     equation: str,
 ) -> List[Point]:
-    """
-    Evalúa una ecuación compuesta sobre los timestamps comunes a todas las
-    variables involucradas y devuelve la serie resultante.
-    """
     common_timestamps = set(var_to_data[variables[0]]["timestamps"])
     for var in variables[1:]:
         common_timestamps &= set(var_to_data[var]["timestamps"])
@@ -196,9 +147,122 @@ def evaluate_composite_series(
 
     return combined
 
+
 # ---------------------------------------------------------------------------
-# Resumen por intervalo (primer / máximo / mínimo / último)
+# process_equations
 # ---------------------------------------------------------------------------
+
+def compute_interval_metrics_by_var(
+    var_to_data: Dict[str, Dict],
+    max_gap_ns: int,
+) -> Dict[str, List[Dict]]:
+    """Por cada var, devuelve una lista de métricas por intervalo continuo.
+
+    Métricas: tStart, tEnd, max, min, pp, prom, start, end (ns).
+    """
+    out: Dict[str, List[Dict]] = {}
+    for var, payload in var_to_data.items():
+        pts = payload["data_points"]
+        intervals = split_into_intervals(pts, max_gap_ns)
+        metrics_list: List[Dict] = []
+        for iv in intervals:
+            vals = [v for _, v in iv]
+            mx = max(vals)
+            mn = min(vals)
+            metrics_list.append(
+                {
+                    "tStart": iv[0][0],
+                    "tEnd": iv[-1][0],
+                    "max": mx,
+                    "min": mn,
+                    "pp": mx - mn,
+                    "prom": (mx + mn) / 2,
+                    "start": iv[0][0],
+                    "end": iv[-1][0],
+                }
+            )
+        out[var] = metrics_list
+    return out
+
+
+def _find_interval_by_tstart(metrics: List[Dict], ts: int, tol: int) -> Dict | None:
+    """Búsqueda binaria del intervalo con tStart más cercano a ts dentro de tol."""
+    if not metrics:
+        return None
+    lo, hi = 0, len(metrics) - 1
+    best = None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        d = metrics[mid]["tStart"] - ts
+        if best is None or abs(d) < abs(best[0]):
+            best = (d, metrics[mid])
+        if d < 0:
+            lo = mid + 1
+        elif d > 0:
+            hi = mid - 1
+        else:
+            break
+    if best is None or abs(best[0]) > tol:
+        return None
+    return best[1]
+
+
+def _extract_metric_tokens(equation: str) -> List[str]:
+    import re
+    return re.findall(r"[A-Za-z_][A-Za-z0-9_]*", equation)
+
+
+def evaluate_process_series(
+    group_name: str,
+    equation: str,
+    principal_var: str,
+    metrics_by_var: Dict[str, List[Dict]],
+    tolerance_ns: int = PROCESS_TOLERANCE_NS,
+) -> List[Point]:
+    """Evalúa una ecuación de process_equations y devuelve un punto por intervalo.
+
+    - El principal es `principal_var`. Se recorren SUS intervalos.
+    - Para cada intervalo del principal, se buscan los intervalos de las
+      demás vars por tStart más cercano dentro de tolerancia.
+    - Si alguna var no tiene intervalo que case, se descarta ese intervalo.
+    - El timestamp del punto resultante es el tStart del principal.
+    """
+    principal_metrics = metrics_by_var.get(principal_var, [])
+    if not principal_metrics:
+        return []
+
+    tokens = _extract_metric_tokens(equation)
+    used_vars = sorted({tok.rsplit("_", 1)[0] for tok in tokens})
+
+    # Compilar una función que reciba las métricas por nombre de token.
+    safe_globals = {"__builtins__": {}}
+    func = eval(f"lambda {','.join(tokens)}: {equation}", safe_globals)
+
+    out: List[Point] = []
+    for iv in principal_metrics:
+        t_start = iv["tStart"]
+        kwargs = {}
+        ok = True
+        for var in used_vars:
+            other = iv if var == principal_var else _find_interval_by_tstart(
+                metrics_by_var.get(var, []), t_start, tolerance_ns
+            )
+            if other is None:
+                ok = False
+                break
+            for metric in ("PROM", "PP", "MAX", "MIN", "START", "END"):
+                key = f"{var}_{metric}"
+                if key in tokens:
+                    kwargs[key] = other[metric.lower()]
+        if not ok:
+            continue
+        try:
+            value = func(**kwargs)
+            out.append((t_start, float(value)))
+        except Exception as e:
+            print(f"  Error evaluando process_equations['{group_name}'] en tStart={t_start}: {e}")
+
+    return out
 
 def summarize_intervals(data_points: List[Point], max_gap_ns: int) -> List[Point]:
     """
@@ -223,7 +287,6 @@ def summarize_intervals(data_points: List[Point], max_gap_ns: int) -> List[Point
         max_pt = max(interval, key=lambda p: p[1])
         min_pt = min(interval, key=lambda p: p[1])
 
-        # dict por timestamp para deduplicar sin perder el orden temporal
         picked = {first[0]: first, max_pt[0]: max_pt, min_pt[0]: min_pt, last[0]: last}
         summary.extend(sorted(picked.values(), key=lambda p: p[0]))
 

@@ -11,7 +11,7 @@ image = (
         "requests",
     )
    # .add_local_file(".env.p1", remote_path="/root/.env.p1")  # Copiamos los archivos .env al contenedor
-    .add_local_file(".env.p2", remote_path="/root/.env.p2")
+    .add_local_file(".env.chinalco", remote_path="/root/.env.chinalco")
     .add_local_dir(".", remote_path="/root/app")            # Copiamos todo el código del proyecto
     .add_local_dir(
         ".",
@@ -52,9 +52,10 @@ def run_sync():
 
     sys.argv = [
         "main.py",
-        "--env-file", "/root/.env.p2",
+        "--env-file", "/root/.env.chinalco",
         "transfer",
         "--fromlastpoint",
+        "--send-email",
     ]
 
     print(f"Ejecutando: {' '.join(sys.argv)}")

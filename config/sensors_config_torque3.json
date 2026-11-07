@@ -1,0 +1,44 @@
+
+{
+  "options": {
+    "minutes_back": 1140,
+    "minutes_back_end": 1080,
+    "interval_scheduler": 1800,
+    "moving_average": false,
+    "demeaning": false,
+    "ma_window": 5,
+    "ma_max_gap_minutes": 1.0
+  },
+  
+  "sensors_channel": {
+    "29372_ch1": { "var": "p4", "slope": 1, "offset": 0, "divisor": 1 },
+    "57619_ch1": { "var": "p4t1", "slope": 1, "offset": 0, "divisor": 1 },
+    "57622_ch1": { "var": "p4t2", "slope": 1, "offset": 0, "divisor": 1 },
+    "57621_ch1": { "var": "p6t1", "slope": 1, "offset": 0, "divisor": 1 },
+    "57620_ch1": { "var": "p6t2", "slope": 1, "offset": 0, "divisor": 1 },
+    "29371_ch1": { "var": "p6", "slope": 1, "offset": 0, "divisor": 1 }
+  },
+  "composite_equations": {
+    "p3": "p3",
+    "p4": "p4",
+    "p5": "p5",
+    "p6": "p6",
+    "p7": "p7",
+    "p13": "p13",
+    "p14": "p14"
+  },
+  "process_equations":{
+   "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+65", 
+   "p4t2_PROM": "p4t1_PROM+p4_PP+p4_PROM+110", 
+   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM+44", 
+   "p6t2_PROM": "-p6t1_PROM+p6_PP+p6_PROM+140"
+  },
+  "output_nodes": {
+    "29372F_ch6": "p4",
+    "57619T_ch6": "p4t1_PROM",
+    "57622T_ch6": "p4t2_PROM",
+    "57621T_ch6": "p6t1_PROM",
+    "57620T_ch6": "p6t2_PROM",
+    "29371F_ch6": "p6"
+  }
+}

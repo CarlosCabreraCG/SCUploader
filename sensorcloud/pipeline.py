@@ -13,7 +13,9 @@ from .transforms import (
     apply_centered_moving_average,
     apply_interval_demeaning,
     apply_linear_calibration,
+    compute_interval_metrics_by_var,
     evaluate_composite_series,
+    evaluate_process_series,
     summarize_intervals,
 )
 
@@ -36,6 +38,54 @@ def _latest_for_channel(
             return latest[0]
 
     return None
+
+
+def _collect_process_violations(config, channel_path: str, process_points: List[tuple], warned: set) -> List[Violation]:
+    """Evaluación de límites para canales de process_equations.
+
+    Cada punto ya es 'un intervalo'. No hay max/min dentro del punto: se usa
+    |valor| como 'pico-pico' representativo.
+    """
+    from .alerts import _table_entry  # reutilizar validación de sensors_table
+
+    limit_raw = config.limit_values.get(channel_path)
+    if limit_raw is None or limit_raw == "-":
+        if channel_path not in warned:
+            warned.add(channel_path)
+            print(f"  ⚠ {channel_path}: sin límite definido (o '-'), se ignora para alertas")
+        return []
+    try:
+        limit = float(limit_raw)
+    except (TypeError, ValueError):
+        if channel_path not in warned:
+            warned.add(channel_path)
+            print(f"  ⚠ {channel_path}: límite inválido '{limit_raw}', se ignora")
+        return []
+
+    entry = _table_entry(config, channel_path)
+    if entry is None:
+        if f"__table__{channel_path}" not in warned:
+            warned.add(f"__table__{channel_path}")
+            print(f"  ⚠ {channel_path}: sin entrada válida en sensors_table, se omite de alertas")
+        return []
+
+    nombre, lado, tipo = entry
+    out: List[Violation] = []
+    for ts, val in process_points:
+        pp = abs(val)
+        if pp >= limit:
+            out.append(
+                Violation(
+                    sensor_key=channel_path,
+                    sensor_name=nombre,
+                    sensor_side=lado,
+                    sensor_type=tipo,
+                    limit=limit,
+                    peak_to_peak=pp,
+                    t_start_ns=ts,
+                )
+            )
+    return out
 
 
 def transfer_complex_data_between_devices(
@@ -66,6 +116,17 @@ def transfer_complex_data_between_devices(
 
     end_time_ns = time.time_ns() - int(minutes_back_end * 60 * 1_000_000_000)
 
+    # Distinguir canales composite y process
+    composite_nodes = {}
+    process_nodes = {}
+    for dest_channel_path, group in config.output_nodes.items():
+        if group in config.composite_equations:
+            composite_nodes[dest_channel_path] = group
+        elif group in config.process_equations:
+            process_nodes[dest_channel_path] = group
+        else:
+            print(f"  ⚠ {dest_channel_path}: grupo '{group}' no existe en composite_equations ni process_equations; se ignora")
+
     last_ts_by_channel: dict = {}
     if from_last_point:
         print("\n--- Modo 'desde el último punto': consultando último dato en destino ---")
@@ -93,9 +154,14 @@ def transfer_complex_data_between_devices(
     print("\n--- PASO 1: Descargando datos crudos ---")
 
     needed_vars = set()
-    for var_group in config.output_nodes.values():
-        for v in var_group.split(","):
+    for group in list(composite_nodes.values()):
+        for v in group.split(","):
             needed_vars.add(v.strip())
+    for group, equation in config.process_equations.items():
+        if group in process_nodes.values():
+            import re
+            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", equation):
+                needed_vars.add(tok.rsplit("_", 1)[0])
 
     channel_to_var = config.channel_to_var
     var_to_source_channel = {v: ch for ch, v in channel_to_var.items()}
@@ -115,7 +181,7 @@ def transfer_complex_data_between_devices(
         data = source_client.download_data_xdr(sensor, channel, start_time_ns, end_time_ns)
         raw_data[src_channel] = data or []
 
-    # PASO 2
+    # PASO 2: calibración
     print("\n--- PASO 2: Aplicando calibración lineal ---")
     calibrated_data = apply_linear_calibration(raw_data, config.channel_calibration)
 
@@ -129,8 +195,8 @@ def transfer_complex_data_between_devices(
                 "data_points": data,
             }
 
-    # PASO 3
-    print("\n--- PASO 3: Aplicando ecuaciones compuestas y generando salida ---")
+    # PASO 3: composite + process
+    print("\n--- PASO 3: Aplicando ecuaciones y generando salida ---")
 
     csv_dir = None
     if export_csv:
@@ -145,17 +211,13 @@ def transfer_complex_data_between_devices(
     violations: List[Violation] = []
     warned_ignored: set = set()
 
-    for dest_channel_path, var_group in config.output_nodes.items():
+    # ---- Composite: serie completa ----
+    for dest_channel_path, var_group in composite_nodes.items():
         sensor_dest, channel_dest = parse_channel_path(dest_channel_path)
-        print(f"\nProcesando '{dest_channel_path}' (vars: {var_group}):")
-
-        if var_group not in config.composite_equations:
-            print(f"  ✗ No se encontró ecuación compuesta para el grupo '{var_group}'")
-            continue
+        print(f"\n[composite] '{dest_channel_path}' (grupo: {var_group})")
 
         eq = config.composite_equations[var_group]
         vars_list = [v.strip() for v in var_group.split(",")]
-        print(f"  Ecuación: {eq}")
 
         missing = [v for v in vars_list if v not in var_to_data or not var_to_data[v]["data_points"]]
         if missing:
@@ -168,6 +230,7 @@ def transfer_complex_data_between_devices(
             continue
 
         print(f"  Puntos calculados: {len(combined_data)}")
+
         upload_data = combined_data
 
         if opts.moving_average:
@@ -194,19 +257,18 @@ def transfer_complex_data_between_devices(
                 if len(upload_data) != before:
                     print(f"  Filtrados {before - len(upload_data)} puntos ya existentes (<= último punto subido)")
                 if not upload_data:
-                    print("  ⚠ No hay puntos nuevos después del último punto ya subido; se omite este canal")
+                    print("  ⚠ Sin puntos nuevos; se omite este canal")
                     continue
+                print(f"  Filtrados {before - len(upload_data)} puntos ya existentes")
 
         summary_data: list = []
         if upload_to_simple and dest_client_simple is not None and upload_data:
             summary_data = summarize_intervals(upload_data, opts.ma_max_gap_ns)
-            print(f"  Puntos resumen (primer/máx/mín/último por intervalo): {len(summary_data)}")
+            print(f"  Puntos resumen: {len(summary_data)}")
 
         # Evaluación de límites sobre la serie resumen (si aplica).
         if check_limits and summary_data:
-            violations.extend(
-                collect_violations(config, dest_channel_path, summary_data, warned_ignored)
-            )
+            violations.extend(collect_violations(config, dest_channel_path, summary_data, warned_ignored))
 
         if export_csv and csv_dir:
             import os
@@ -226,6 +288,60 @@ def transfer_complex_data_between_devices(
 
         if upload_to_simple and dest_client_simple is not None and summary_data:
             dest_client_simple.upload_data(sensor_dest, channel_dest, summary_data)
+
+    # ---- Process: un punto por intervalo ----
+    if process_nodes:
+        print("\n--- process_equations: métricas por intervalo ---")
+        metrics_by_var = compute_interval_metrics_by_var(var_to_data, opts.ma_max_gap_ns)
+
+        # Cachear por grupo (varios canales podrían compartir grupo, aunque no debería)
+        process_points_by_group: dict = {}
+
+        for dest_channel_path, group in process_nodes.items():
+            sensor_dest, channel_dest = parse_channel_path(dest_channel_path)
+            print(f"\n[process] '{dest_channel_path}' (grupo: {group})")
+
+            if group not in process_points_by_group:
+                equation = config.process_equations[group]
+                principal_var = group.rsplit("_", 1)[0]
+                pts = evaluate_process_series(group, equation, principal_var, metrics_by_var)
+                process_points_by_group[group] = pts
+                print(f"  Puntos calculados: {len(pts)}")
+            else:
+                print(f"  (reutiliza cálculo del grupo '{group}')")
+
+            upload_data = process_points_by_group[group]
+            if not upload_data:
+                print("  ⚠ Sin intervalos válidos; no se sube nada")
+                continue
+
+            if from_last_point:
+                threshold = last_ts_by_channel.get(dest_channel_path)
+                if threshold is not None:
+                    before = len(upload_data)
+                    upload_data = [(ts, val) for ts, val in upload_data if ts > threshold]
+                    if not upload_data:
+                        print("  ⚠ Sin puntos nuevos; se omite este canal")
+                        continue
+                    print(f"  Filtrados {before - len(upload_data)} puntos ya existentes")
+
+            if check_limits:
+                violations.extend(
+                    _collect_process_violations(config, dest_channel_path, upload_data, warned_ignored)
+                )
+
+            if export_csv and csv_dir:
+                import os
+                safe_channel = dest_channel_path.replace("/", "_").replace("\\", "_")
+                save_to_csv(upload_data, os.path.join(csv_dir, f"{safe_channel}.csv"))
+
+            if save_to_store:
+                datastore.append_points(dest_channel_path, upload_data, data_dir=data_dir)
+
+            if upload_to_dest and dest_client is not None:
+                dest_client.upload_data(sensor_dest, channel_dest, upload_data)
+            if upload_to_simple and dest_client_simple is not None:
+                dest_client_simple.upload_data(sensor_dest, channel_dest, upload_data)
 
     if export_csv and csv_dir:
         print(f"\n  📊 Todos los CSVs guardados en: {csv_dir}")
