@@ -1,8 +1,8 @@
 
 {
   "options": {
-    "minutes_back": 1140,
-    "minutes_back_end": 1080,
+    "minutes_back": 40,
+    "minutes_back_end": 0,
     "interval_scheduler": 1800,
     "moving_average": false,
     "demeaning": false,
@@ -20,25 +20,23 @@
   },
   "composite_equations": {
     "p3": "p3",
-    "p4": "p4",
+    "p4": "p4/5",
     "p5": "p5",
-    "p6": "p6",
+    "p6": "p6/5",
     "p7": "p7",
     "p13": "p13",
     "p14": "p14"
   },
   "process_equations":{
-   "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+65", 
-   "p4t2_PROM": "p4t1_PROM+p4_PP+p4_PROM+110", 
-   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM+44", 
-   "p6t2_PROM": "-p6t1_PROM+p6_PP+p6_PROM+140"
+   "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+20", 
+   "p4t2_PROM": "p4t2_PROM+p4_PP+p4_PROM+22", 
+   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM-30", 
+   "p6t2_PROM": "-p6t2_PROM+p6_PP+p6_PROM+80"
   },
   "output_nodes": {
-    "29372F_ch6": "p4",
-    "57619T_ch6": "p4t1_PROM",
-    "57622T_ch6": "p4t2_PROM",
-    "57621T_ch6": "p6t1_PROM",
-    "57620T_ch6": "p6t2_PROM",
-    "29371F_ch6": "p6"
+    "57619T_ch1": "p4t1_PROM",
+    "57622T_ch1": "p4t2_PROM",
+    "57621T_ch1": "p6t1_PROM",
+    "57620T_ch1": "p6t2_PROM"
   }
 }
