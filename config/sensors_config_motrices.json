@@ -1,7 +1,7 @@
 {
   "options": {
-    "minutes_back": 1140,
-    "minutes_back_end": 1080,
+    "minutes_back": 0,
+    "minutes_back_end": 0,
     "interval_scheduler": 1800,
     "moving_average": false,
     "demeaning": false,
@@ -11,31 +11,31 @@
   
   "sensors_channel": {
     "54649_ch1": { "var": "p3", "slope": 1, "offset": 0, "divisor": 5 },
-    "29372_ch1": { "var": "p4", "slope": 1, "offset": 0, "divisor": 5 },
+    "29372_ch1": { "var": "p4", "slope": 1, "offset": 0, "divisor": 1 },
     "57619_ch1": { "var": "p4t1", "slope": 1, "offset": 0, "divisor": 1 },
     "57622_ch1": { "var": "p4t2", "slope": 1, "offset": 0, "divisor": 1 },
     "57618_ch1": { "var": "p5", "slope": 1, "offset": 0, "divisor": 5 },
     "57621_ch1": { "var": "p6t1", "slope": 1, "offset": 0, "divisor": 1 },
     "57620_ch1": { "var": "p6t2", "slope": 1, "offset": 0, "divisor": 1 },
-    "29371_ch1": { "var": "p6", "slope": 1, "offset": 0, "divisor": 5 },
+    "29371_ch1": { "var": "p6", "slope": 1, "offset": 0, "divisor": 1 },
     "57582_ch1": { "var": "p7", "slope": 1, "offset": 0, "divisor": 5 },
     "57611_ch1": { "var": "p13", "slope": 1, "offset": 0, "divisor": 5 },
     "57617_ch1": { "var": "p14", "slope": 1, "offset": 0, "divisor": 5 }
   },
   "composite_equations": {
     "p3": "p3",
-    "p4": "p4",
+    "p4": "p4/5",
     "p5": "p5",
-    "p6": "p6",
+    "p6": "p6/5",
     "p7": "p7",
     "p13": "p13",
     "p14": "p14"
   },
   "process_equations":{
-   "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+65", 
-   "p4t2_PROM": "p4t1_PROM+p4_PP+p4_PROM+110", 
-   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM+44", 
-   "p6t2_PROM": "-p6t1_PROM+p6_PP+p6_PROM+140"
+  "p4t1_PROM": "-p4t1_PROM+p4_PP+p4_PROM+20", 
+   "p4t2_PROM": "p4t2_PROM+p4_PP+p4_PROM+22", 
+   "p6t1_PROM": "p6t1_PROM+p6_PP-p6_PROM-30", 
+   "p6t2_PROM": "-p6t2_PROM+p6_PP+p6_PROM+80"
   },
   "output_nodes": {
     "54649F_ch1": "p3",
@@ -44,36 +44,36 @@
     "57622T_ch1": "p4t2_PROM",
     "57618F_ch1": "p5",
     "57621T_ch1": "p6t1_PROM",
-    "57620T_ch1": "p6t1_PROM",
+    "57620T_ch1": "p6t2_PROM",
     "29371F_ch1": "p6",
     "57582F_ch1": "p7",
     "57611F_ch1": "p13",
     "57617F_ch1": "p14"
   },
   "limit_values": {
-    "54649F_ch1": "50",
-    "29372F_ch1": "28",
+    "54649F_ch1": "110",
+    "29372F_ch1": "90",
     "57619T_ch1": "-",
     "57622T_ch1": "-",
-    "57618F_ch1": "20",
+    "57618F_ch1": "106",
     "57621T_ch1": "-",
     "57620T_ch1": "-",
-    "29371F_ch1": "50",
-    "57582F_ch1": "90",
-    "57611F_ch1": "25",
-    "57617F_ch1": "52"
+    "29371F_ch1": "62",
+    "57582F_ch1": "88",
+    "57611F_ch1": "88",
+    "57617F_ch1": "88"
   },
   "sensors_table": {
-    "54649F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "54649F_ch1": { "nombre": "Polea 03", "lado": "izquierda", "tipo": "flexión" },
     "29372F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
     "57619T_ch1": "-",
     "57622T_ch1": "-",
-    "57618F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
+    "57618F_ch1": { "nombre": "Polea 05", "lado": "izquierda", "tipo": "flexión" },
     "57621T_ch1": "-",
     "57620T_ch1": "-",
-    "29371F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
-    "57582F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
-    "57611F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" },
-    "57617F_ch1": { "nombre": "Polea 04", "lado": "derecha", "tipo": "flexión" }
+    "29371F_ch1": { "nombre": "Polea 06", "lado": "derecha", "tipo": "flexión" },
+    "57582F_ch1": { "nombre": "Polea 07", "lado": "izquierda", "tipo": "flexión" },
+    "57611F_ch1": { "nombre": "Polea 13", "lado": "derecha", "tipo": "flexión" },
+    "57617F_ch1": { "nombre": "Polea 14", "lado": "derecha", "tipo": "flexión" }
   }
 }

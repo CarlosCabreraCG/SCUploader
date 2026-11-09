@@ -36,7 +36,7 @@ app = modal.App("sensorcloud-sync")
 # Eejcutar cada 30 min
 @app.function(
     image=image,
-    schedule=modal.Cron("1,31 * * * *"),
+    schedule=modal.Cron("15,45 * * * *"),
     timeout=300,
 )
 def run_sync():
